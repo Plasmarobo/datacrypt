@@ -6,9 +6,11 @@
 
 #include "defs.h"
 
-typedef void (*state_func_t)(void *);
+#ifdef __cplusplus
+extern "C" {
+#endif
 
-typedef struct state_t;
+typedef void (*state_func_t)(void);
 
 typedef struct {
     state_func_t enter;
@@ -16,70 +18,73 @@ typedef struct {
     state_func_t exit;
 } state_t;
 
-typedef struct {
-    state_t *current;
-} state_machine_t;
-
 // clang-format off
 
-// Starts an FSM
-#define FSM(fsm) state_machine_t fsm = {NULL}
+#define STATE_ENTER(fsm,name) static void TRICAT(fsm,name,_enter)(void)
+#define STATE_UPDATE(fsm,name) static void TRICAT(fsm,name,_update)(void)
+#define STATE_EXIT(fsm,name) static void TRICAT(fsm,name,_exit)(void)
 
-// Defines an enter state
-#define STATE_ENTER(name) void CONCAT(name,_fn_enter)(void *ctx)
+#define STATE_1_ARG(fsm,name,enter) \
+static state_t CONCAT(fsm,name) = { \
+    &TRICAT(fsm,name,_enter), \
+    NULL, \
+    NULL, \
+}
 
-// Defines an exit state
-#define STATE_EXIT(name) void CONCAT(name,_fn_exit)(void *ctx)
+#define STATE_2_ARG(fsm,name,enter,update) \
+static state_t CONCAT(fsm,name) = { \
+    &TRICAT(fsm,name,_enter), \
+    &TRICAT(fsm,name,_update), \
+    NULL, \
+}
 
-// Defines an update state
-#define STATE_UPDATE(name) void CONCAT(name,_fn_update)(void *ctx)
+#define STATE_3_ARG(fsm,name,enter,update,exit) \
+static state_t CONCAT(fsm,name) = { \
+    &TRICAT(fsm,name,_enter), \
+    &TRICAT(fsm,name,_update), \
+    &TRICAT(fsm,name,_exit), \
+}
 
-// Constructs a state, populates function pointers
-// with enter, exit, and update where they exist
-// State can be referenced with fsm_name
-#define REGISTER_STATE(fsm,name)                                   \
-__attribute__((weak)) void CONCAT(name,_fn_enter)(void *ctx){};                   \
-__attribute__((weak)) void CONCAT(name,_fn_exit)(void* ctx){};                    \
-__attribute__((weak)) void CONCAT(name,_fn_update)(void* ctx){};                  \
-state_t CONCAT(fsm,name) = {                                       \
-    &CONCAT(name,_fn_enter),                                       \
-    &CONCAT(name,_fn_exit),                                        \
-    &CONCAT(name,_fn_update),                                      \
-}                                                                 
+#define STATE_EXTRACT_ARG(a1, a2, a3, a4, ...) a4
+#define STATE_FLEX(...) \
+STATE_EXTRACT_ARG(__VA_ARGS__, STATE_3_ARG, STATE_2_ARG, STATE_1_ARG, )
 
-#define FSM_SET_STATE(fsm, name) \
-impl_fsm_set_state(&fsm, &CONCAT(fsm,name))
+#define STATE(fsm, name, ...) STATE_FLEX(__VA_ARGS__)(fsm, name, __VA_ARGS__)
+#define DECLARESTATE(fsm,name) static state_t CONCAT(fsm,name);
 
+#define STATENAME(fsm,name) CONCAT(fsm,name)
+#define STATEREF(fsm,name) (void*)&STATENAME(fsm,name)
+
+// Stack-driven FSM pattern
+#define STATESTACK(fsm,depth) STACK(CONCAT(fsm,_stack), state_t*,depth)
+#define STACKNAME(fsm) CONCAT(fsm,_stack)
+#define PUSHSTATE(fsm,name) { state_t* t_state = STATEREF(fsm,name); stack_push(&STACKNAME(fsm),&t_state); }
+#define QUEUESTATE(fsm,name) {state_t* s = STATEREF(fsm,name); ringbuffer_push(&state_queue, &s);}
 // clang-format on
 
 /* *** Example ***
-FSM(EXAMPLEFSM);
-STATE_ENTER(IDLE)
+STATE_ENTER(f,IDLE)
 {
     return 0;
 };
-STATE_EXIT(IDLE)
+STATE_EXIT(f,IDLE)
 {
     return 0;
 };
-STATE_UPDATE(IDLE)
+STATE_UPDATE(f,IDLE)
 {
     return 0;
 };
-REGISTER_STATE(EXAMPLEFSM,IDLE);
-// EXAMPLEFSM_IDLE should be 0 here
-// We could set the state with fsm_set_state(EXAMPLEFSM, IDLE);
+STATE(f,IDLE,enter,update,exit);
 */
-
-// Set the state of an fsm, runs enter, exit then sets the current state
-
 // Generic implementation
-void impl_fsm_set_state(state_machine_t *fsm, state_t *new_state);
-
-// Get the current state of an fsm
-#define FSM_GET_STATE(fsm) (fsm).current
+void fsm_set_state(state_t *current, state_t *new);
 
 // Run the current state update routine
-void fsm_update(state_machine_t *fsm);
+void fsm_update(state_t *current);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif  // FSM_H

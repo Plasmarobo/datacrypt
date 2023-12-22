@@ -13,9 +13,8 @@
 ######################################
 # target
 ######################################
-TARGET = DataCrypt
-
-
+TARGET ?= DataCrypt
+APPDIR ?= app
 ######################################
 # building variables
 ######################################
@@ -35,37 +34,39 @@ BUILD_DIR = build
 # source
 ######################################
 # C sources
-C_SOURCES = $(shell find App -name '*.c')
-C_SOURCES += $(shell find Core -name '*.c')
-C_SOURCES += $(shell find Utils -name '*.c')
+C_SOURCES = $(shell find $(APPDIR) -name '*.c')
+
+# Common sources
+C_SOURCES += $(shell find board -name '*.c')
+C_SOURCES += $(shell find utils -name '*.c')
 C_SOURCES +=  \
-Drivers/STM32G0xx_HAL_Driver/Src/stm32g0xx_hal_adc.c \
-Drivers/STM32G0xx_HAL_Driver/Src/stm32g0xx_hal_adc_ex.c \
-Drivers/STM32G0xx_HAL_Driver/Src/stm32g0xx_ll_adc.c \
-Drivers/STM32G0xx_HAL_Driver/Src/stm32g0xx_hal_rcc.c \
-Drivers/STM32G0xx_HAL_Driver/Src/stm32g0xx_hal_rcc_ex.c \
-Drivers/STM32G0xx_HAL_Driver/Src/stm32g0xx_ll_rcc.c \
-Drivers/STM32G0xx_HAL_Driver/Src/stm32g0xx_hal_flash.c \
-Drivers/STM32G0xx_HAL_Driver/Src/stm32g0xx_hal_flash_ex.c \
-Drivers/STM32G0xx_HAL_Driver/Src/stm32g0xx_hal_gpio.c \
-Drivers/STM32G0xx_HAL_Driver/Src/stm32g0xx_hal_dma.c \
-Drivers/STM32G0xx_HAL_Driver/Src/stm32g0xx_hal_dma_ex.c \
-Drivers/STM32G0xx_HAL_Driver/Src/stm32g0xx_ll_dma.c \
-Drivers/STM32G0xx_HAL_Driver/Src/stm32g0xx_hal_pwr.c \
-Drivers/STM32G0xx_HAL_Driver/Src/stm32g0xx_hal_pwr_ex.c \
-Drivers/STM32G0xx_HAL_Driver/Src/stm32g0xx_hal_cortex.c \
-Drivers/STM32G0xx_HAL_Driver/Src/stm32g0xx_hal.c \
-Drivers/STM32G0xx_HAL_Driver/Src/stm32g0xx_hal_exti.c \
-Drivers/STM32G0xx_HAL_Driver/Src/stm32g0xx_hal_i2c.c \
-Drivers/STM32G0xx_HAL_Driver/Src/stm32g0xx_hal_i2c_ex.c \
-Drivers/STM32G0xx_HAL_Driver/Src/stm32g0xx_hal_spi.c \
-Drivers/STM32G0xx_HAL_Driver/Src/stm32g0xx_hal_spi_ex.c \
-Drivers/STM32G0xx_HAL_Driver/Src/stm32g0xx_hal_tim.c \
-Drivers/STM32G0xx_HAL_Driver/Src/stm32g0xx_hal_tim_ex.c \
-Drivers/STM32G0xx_HAL_Driver/Src/stm32g0xx_hal_uart.c \
-Drivers/STM32G0xx_HAL_Driver/Src/stm32g0xx_hal_uart_ex.c \
-Drivers/STM32G0xx_HAL_Driver/Src/stm32g0xx_hal_crc.c \
-Drivers/STM32G0xx_HAL_Driver/Src/stm32g0xx_hal_crc_ex.c
+drivers/STM32G0xx_HAL_Driver/Src/stm32g0xx_hal_adc.c \
+drivers/STM32G0xx_HAL_Driver/Src/stm32g0xx_hal_adc_ex.c \
+drivers/STM32G0xx_HAL_Driver/Src/stm32g0xx_ll_adc.c \
+drivers/STM32G0xx_HAL_Driver/Src/stm32g0xx_hal_rcc.c \
+drivers/STM32G0xx_HAL_Driver/Src/stm32g0xx_hal_rcc_ex.c \
+drivers/STM32G0xx_HAL_Driver/Src/stm32g0xx_ll_rcc.c \
+drivers/STM32G0xx_HAL_Driver/Src/stm32g0xx_hal_flash.c \
+drivers/STM32G0xx_HAL_Driver/Src/stm32g0xx_hal_flash_ex.c \
+drivers/STM32G0xx_HAL_Driver/Src/stm32g0xx_hal_gpio.c \
+drivers/STM32G0xx_HAL_Driver/Src/stm32g0xx_hal_dma.c \
+drivers/STM32G0xx_HAL_Driver/Src/stm32g0xx_hal_dma_ex.c \
+drivers/STM32G0xx_HAL_Driver/Src/stm32g0xx_ll_dma.c \
+drivers/STM32G0xx_HAL_Driver/Src/stm32g0xx_hal_pwr.c \
+drivers/STM32G0xx_HAL_Driver/Src/stm32g0xx_hal_pwr_ex.c \
+drivers/STM32G0xx_HAL_Driver/Src/stm32g0xx_hal_cortex.c \
+drivers/STM32G0xx_HAL_Driver/Src/stm32g0xx_hal.c \
+drivers/STM32G0xx_HAL_Driver/Src/stm32g0xx_hal_exti.c \
+drivers/STM32G0xx_HAL_Driver/Src/stm32g0xx_hal_i2c.c \
+drivers/STM32G0xx_HAL_Driver/Src/stm32g0xx_hal_i2c_ex.c \
+drivers/STM32G0xx_HAL_Driver/Src/stm32g0xx_hal_spi.c \
+drivers/STM32G0xx_HAL_Driver/Src/stm32g0xx_hal_spi_ex.c \
+drivers/STM32G0xx_HAL_Driver/Src/stm32g0xx_hal_tim.c \
+drivers/STM32G0xx_HAL_Driver/Src/stm32g0xx_hal_tim_ex.c \
+drivers/STM32G0xx_HAL_Driver/Src/stm32g0xx_hal_uart.c \
+drivers/STM32G0xx_HAL_Driver/Src/stm32g0xx_hal_uart_ex.c \
+drivers/STM32G0xx_HAL_Driver/Src/stm32g0xx_hal_crc.c \
+drivers/STM32G0xx_HAL_Driver/Src/stm32g0xx_hal_crc_ex.c
 
 # ASM sources
 ASM_SOURCES =  \
@@ -121,14 +122,15 @@ AS_INCLUDES =
 
 # C includes
 C_INCLUDES =  \
--ICore/Inc \
--IDrivers/STM32G0xx_HAL_Driver/Inc \
--IDrivers/STM32G0xx_HAL_Driver/Inc/Legacy \
--IDrivers/CMSIS/Device/ST/STM32G0xx/Include \
--IDrivers/CMSIS/Include \
--IApp/inc \
--IUtils/inc
+-Iboard/inc \
+-Idrivers/STM32G0xx_HAL_Driver/Inc \
+-Idrivers/STM32G0xx_HAL_Driver/Inc/Legacy \
+-Idrivers/CMSIS/Device/ST/STM32G0xx/Include \
+-Idrivers/CMSIS/Include \
+-Iapp/inc \
+-Iutils/inc
 
+CPP_INCLUDES += $(foreach dir,$(INCDIRS),-I$(dir))
 
 # compile gcc flags
 ASFLAGS = $(MCU) $(AS_DEFS) $(AS_INCLUDES) $(OPT) -Wall -fdata-sections -ffunction-sections
@@ -141,7 +143,7 @@ endif
 
 
 # Generate dependency information
-CFLAGS += -MMD -MP -MF"$(@:%.o=%.d)"
+CFLAGS += -MMD -MP -MF"$(@:%.o=%.d)" -std=c11
 
 
 #######################################
@@ -158,6 +160,8 @@ LDFLAGS = $(MCU) -specs=nano.specs -T$(LDSCRIPT) $(LIBDIR) $(LIBS) -Wl,-Map=$(BU
 # default action: build all
 all: $(BUILD_DIR)/$(TARGET).elf $(BUILD_DIR)/$(TARGET).hex $(BUILD_DIR)/$(TARGET).bin
 
+test:
+	make -C test
 
 #######################################
 # build the application

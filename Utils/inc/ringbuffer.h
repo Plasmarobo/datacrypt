@@ -4,6 +4,10 @@
 #include <stdbool.h>
 #include <stdint.h>
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #include "defs.h"
 
 // Defines a static ringbuffer
@@ -35,5 +39,9 @@ bool ringbuffer_empty(ringbuffer_t* rb);
 bool ringbuffer_push(ringbuffer_t* rb, void* item);
 bool ringbuffer_pop(ringbuffer_t* rb, void* item);
 bool ringbuffer_peek(ringbuffer_t* rb, void* item);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif  // RINGBUFFER_H
