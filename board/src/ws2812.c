@@ -20,15 +20,15 @@
 // Need 50us of 0 to reset = 150 bits = 19
 
 // 2 MHz
-#define LED_COUNT (DISPLED_STATUS_LENGTH + (2 * COUNTER_LENGTH) + TIMER_LENGTH)
-#define BITS_PER_BIT (4)
-#define RST_BYTES (60)
-// One byte per color channel
-#define BYTES_PER_LED (BITS_PER_BIT * 3)
-#define CODEPOINT_LENGTH (RST_BYTES + (BYTES_PER_LED * LED_COUNT))
+typedef uint32_t wave_t;
 
+#define LED_COUNT (DISPLED_STATUS_LENGTH + (2 * COUNTER_LENGTH) + TIMER_LENGTH)
+#define BYTES_PER_BYTE (3)
+#define RST_BYTES (19)
+#define CODEPOINT_PITCH (BYTES_PER_BYTE * 3)
+#define CODEPOINT_LENGTH (RST_BYTES + (BYTES_PER_BYTE * 3 * LED_COUNT))
 // Brightness from 0 to 255
-static uint16_t brightness = 96;
+static uint16_t brightness = 255;
 static bool _leds_busy = false;
 
 /*
@@ -80,8 +80,13 @@ static inline void hsv_pointer_swap(uint8_t sextant, uint8_t** r, uint8_t** g,
     }
 }
 
-// Adafruit gamma table
+const uint32_t WS_LOW = 0x4;
+const uint32_t WS_HIGH = 0x6;
+const uint32_t WS_RST = 0x0;
 
+#define ENABLE_GAMMA_CORRECTION 1
+// Adafruit gamma table
+#if defined(ENABLE_GAMMA_CORRECTION)
 /* I disagree with 6.7.9p11 in this context */
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-W"
@@ -105,39 +110,46 @@ static const uint8_t gamma8[] = {
     215, 218, 220, 223, 225, 228, 231, 233, 236, 239, 241, 244, 247, 249, 252,
     255,
 };
-
-static uint8_t codepoints[CODEPOINT_LENGTH] = {0};
-
-const uint32_t WS_LOW = 0x8;   // 1000
-const uint32_t WS_HIGH = 0xE;  // 1110
-const uint32_t WS_RST = 0x0;
+inline static uint8_t gamma(uint8_t value) { return gamma8[value]; }
+#else
+inline static uint8_t gamma(uint8_t value) { return value; }
+#endif
+static uint8_t codepoints[CODEPOINT_LENGTH] = {WS_RST};
 
 static inline uint8_t scale_brightness(uint8_t input) {
     uint16_t tmp = input * brightness;
     return (uint8_t)(tmp >> 8);
 }
 
-// Writes one byte into codepoints and increments write pointer
-void write_codepoint(uint8_t** write_ptr, uint8_t value) {
-    // Each byte encodes 2 bit when BITS_PER_BIT is 4
-    for (uint8_t bit = 0; bit < 8; bit += 2) {
-        uint8_t mask = (0x01 << bit);
-        **write_ptr = (mask & value ? WS_HIGH : WS_LOW) << BITS_PER_BIT;
-        mask <<= 1;
-        **write_ptr |= (mask & value ? WS_HIGH : WS_LOW);
-        *write_ptr += 1;
+static inline wave_t byte_to_wave(uint8_t b) {
+    wave_t wave = 0;
+    for (uint32_t input_bit = 0; input_bit < 8; ++input_bit) {
+        if (b & (1 << input_bit)) {
+            // Bit is set, write
+            wave |= (WS_HIGH << (input_bit * BYTES_PER_BYTE));
+        } else {
+            wave |= (WS_LOW << (input_bit * BYTES_PER_BYTE));
+        }
     }
+    return wave;
+}
+
+static inline void write_codepoint(uint32_t* offset, wave_t wave) {
+    // MSB first configuration
+    codepoints[(*offset)++] = (wave >> 16) & 0xFF;
+    codepoints[(*offset)++] = (wave >> 8) & 0xFF;
+    codepoints[(*offset)++] = (wave)&0xFF;
 }
 
 void set_rgb(uint32_t address, uint8_t r, uint8_t g, uint8_t b) {
     if (address < LED_COUNT) {
-        uint8_t* write_ptr = codepoints + RST_BYTES + (address * BYTES_PER_LED);
-        uint8_t scaled_g = gamma8[scale_brightness(g)];
-        uint8_t scaled_r = gamma8[scale_brightness(r)];
-        uint8_t scaled_b = gamma8[scale_brightness(b)];
-        write_codepoint(&write_ptr, scaled_g);
-        write_codepoint(&write_ptr, scaled_r);
-        write_codepoint(&write_ptr, scaled_b);
+        uint32_t offset = RST_BYTES + (address * CODEPOINT_PITCH);
+        uint8_t scaled_g = gamma(scale_brightness(g));
+        uint8_t scaled_r = gamma(scale_brightness(r));
+        uint8_t scaled_b = gamma(scale_brightness(b));
+        write_codepoint(&offset, byte_to_wave(scaled_g));
+        write_codepoint(&offset, byte_to_wave(scaled_r));
+        write_codepoint(&offset, byte_to_wave(scaled_b));
     }
 }
 

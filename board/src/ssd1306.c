@@ -69,7 +69,7 @@
 #define CHARGE_PUMP_ENABLE (0x14)
 #define CLK_DIVIDER (0x80)
 
-#define MUX_ENABLE_DELAY_US (1)
+#define MUX_ENABLE_DELAY_MS (100)
 #define DISPLAY_TASK_PERIOD_MS (100)
 #define DISPLAY_STATE_STACK_DEPTH (8)
 #define DISPLAY_COMMAND_BUFFER_DEPTH (32)
@@ -118,14 +118,7 @@ static void init_next(int32_t status)
 
 STATE_ENTER(dfsm, init)
 {
-    if (selected_display == 0)
-    {
-        if (user_callback != NULL)
-        {
-            callback_cache = user_callback;
-        }
-        display_mux_enable();
-    }
+    serial_printf("Display: %d\r\n", selected_display);
     if (selected_display < DISPLAY_MAX)
     {
         user_callback = init_next;
@@ -250,23 +243,51 @@ uint8_t test_image[8] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
 void display_init(callback_t on_init) {
     // Copy bootmsg into framebuffer
     user_callback = on_init;
-    callback_cache = NULL;
+    callback_cache = on_init;
     selected_display = 0;
     display_pages = 0;
     current_state = NULL;
+    display_mux_enable();
     display_clear();
     memset(framebuffer, 0xFF, 128);
     display_blit(0, 0, img_millibyte_alt_cropped, 128, 32);
     QUEUESTATE(dfsm, init);
-    next_state(0);
+    task_delayed(next_state, MILLIS(MUX_ENABLE_DELAY_MS));
+}
+
+static struct {
+    length_t size;
+    callback_t on_complete;
+    uint8_t* data;
+    uint8_t retries;
+} current_txn;
+
+static void transaction_handler(int32_t status) {
+    if ((I2C_SUCCESS == status) || (current_txn.retries == 0)) {
+        if (NULL != current_txn.on_complete) {
+            current_txn.on_complete(status);
+        }
+    } else {
+        --current_txn.retries;
+        i2c_write(DISPLAY_ADDRESS_CMD, current_txn.size, current_txn.data,
+                  transaction_handler);
+    }
+}
+
+static void start_transaction(uint8_t* data, length_t data_size,
+                              callback_t on_complete) {
+    current_txn.size = data_size;
+    current_txn.data = data;
+    current_txn.on_complete = on_complete;
+    current_txn.retries = 3;
+    i2c_write(DISPLAY_ADDRESS_CMD, current_txn.size, current_txn.data,
+              transaction_handler);
 }
 
 static void display_command(length_t data_size, callback_t on_complete) {
     // Send
     command_buffer[0] = CMD_HEADER;
-    if (i2c_get_status() == I2C_SUCCESS) {
-        i2c_write(DISPLAY_ADDRESS_CMD, data_size, command_buffer, on_complete);
-    }
+    start_transaction(command_buffer, data_size, on_complete);
 }
 
 static void display_page(callback_t on_complete) {
@@ -275,10 +296,7 @@ static void display_page(callback_t on_complete) {
     memcpy(page_buffer + 1, page_ptr, PAGE_WIDTH);
     page_ptr += PAGE_WIDTH;
     // Pages need to be converted to columnar data
-    if (i2c_get_status() == I2C_SUCCESS) {
-        i2c_write(DISPLAY_ADDRESS_CMD, DISPLAY_PAGE_BUFFER_DEPTH, page_buffer,
-                  on_complete);
-    }
+    start_transaction(page_buffer, DISPLAY_PAGE_BUFFER_DEPTH, on_complete);
 }
 
 static void display_complete(int32_t status) {

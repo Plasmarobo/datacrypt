@@ -27,6 +27,7 @@ extern "C" {
 #endif
 
 /* Includes ------------------------------------------------------------------*/
+#include <stdarg.h>
 #include <stdbool.h>
 #include <stdint.h>
 
@@ -213,14 +214,29 @@ void flash_rx_complete_handler(int32_t status);
 // ========== Serial Comm ==========
 void serial_read(buffer_t dest, length_t length, callback_t oncomplete);
 void serial_write(const buffer_t data, length_t length, callback_t oncomplete);
+void serial_print(const char* str);
+void serial_printf(const char* fmt, ...);
+void vserial_printf(const char* fmt, va_list args);
 void serial_tx_complete_handler(int32_t status);
 void serial_rx_complete_handler(int32_t status);
 
 // ========== Pseudo RNG ==========
-void rng_init();
+void random_init();
 // Produce a 16 bit prng number
-uint16_t random();
-void random_update_handler(int32_t status);
+uint32_t random_int();
+uint32_t uniform(uint32_t min, uint32_t max);
+
+// ========== Analog Channels ==========
+// External voltage divider
+uint16_t bat_read();
+// Floating analog pin
+uint16_t rng_read();
+// Internal temperature sensor (converted)
+uint16_t temp_read();
+// Internal temperature sensor (raw)
+uint16_t temp_read_raw();
+// Internal vbat
+uint16_t vbat_read();
 
 // ========== BSP =======================
 void bsp_init();

@@ -18,14 +18,11 @@ extern "C" {
 typedef void (*callback_t)(int32_t);
 typedef uint32_t length_t;
 typedef uint8_t* buffer_t;
-typedef int32_t timespan_t;
+typedef uint32_t timespan_t;
 
 // ========== uS timer ==========
 #define MILLIS(x) (x * 1000)
 #define MICROS(x) (x)
-
-// Correct rollover depends on the width of timespan_t
-#define CORRECT_ROLLOVER(x) (0xFFFFFFFF - x)
 
 timespan_t microseconds();
 timespan_t milliseconds();

@@ -19,6 +19,7 @@
 /* Includes ------------------------------------------------------------------*/
 #include "bsp.h"
 
+#include <stdarg.h>
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 
@@ -85,11 +86,11 @@ gpio_t MUXRST = {GPIO_PIN_5, GPIOB};
 gpio_t DISPLAY_SCL = {GPIO_PIN_6, GPIOB};
 gpio_t LOCK0_TGL = {GPIO_PIN_8, GPIOB};
 gpio_t LOCK1_TGL = {GPIO_PIN_9, GPIOB};
-gpio_t ANALOG_RNG = {GPIO_PIN_12, GPIOA};
+gpio_t ANALOG_RNG = {GPIO_PIN_1, GPIOA};
 /* USER CODE BEGIN Private defines */
 
 /* USER CODE BEGIN PV */
-static timespan_t us_accumulator;
+static timespan_t us_accumulator = 0;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -166,8 +167,6 @@ void bsp_init(void) {
     __HAL_FREEZE_TIM14_DBGMCU();
     /* Initialize interrupts */
     MX_NVIC_Init();
-
-    rng_init();
 }
 
 /**
@@ -275,14 +274,14 @@ static void MX_ADC1_Init(void) {
      * Alignment and number of conversion)
      */
     hadc1.Instance = ADC1;
-    hadc1.Init.ClockPrescaler = ADC_CLOCK_SYNC_PCLK_DIV4;
-    hadc1.Init.Resolution = ADC_RESOLUTION_8B;
+    hadc1.Init.ClockPrescaler = ADC_CLOCK_ASYNC_DIV8;
+    hadc1.Init.Resolution = ADC_RESOLUTION_12B;
     hadc1.Init.DataAlign = ADC_DATAALIGN_RIGHT;
-    hadc1.Init.ScanConvMode = ADC_SCAN_DISABLE;
+    hadc1.Init.ScanConvMode = ADC_SCAN_ENABLE;
     hadc1.Init.EOCSelection = ADC_EOC_SINGLE_CONV;
     hadc1.Init.LowPowerAutoWait = DISABLE;
     hadc1.Init.LowPowerAutoPowerOff = DISABLE;
-    hadc1.Init.ContinuousConvMode = DISABLE;
+    hadc1.Init.ContinuousConvMode = ENABLE;
     hadc1.Init.NbrOfConversion = 1;
     hadc1.Init.DiscontinuousConvMode = DISABLE;
     hadc1.Init.ExternalTrigConv = ADC_SOFTWARE_START;
@@ -290,23 +289,12 @@ static void MX_ADC1_Init(void) {
     hadc1.Init.DMAContinuousRequests = DISABLE;
     hadc1.Init.Overrun = ADC_OVR_DATA_PRESERVED;
     hadc1.Init.SamplingTimeCommon1 = ADC_SAMPLETIME_1CYCLE_5;
-    hadc1.Init.SamplingTimeCommon2 = ADC_SAMPLETIME_1CYCLE_5;
+    hadc1.Init.SamplingTimeCommon2 = ADC_SAMPLETIME_160CYCLES_5;
     hadc1.Init.OversamplingMode = DISABLE;
     hadc1.Init.TriggerFrequencyMode = ADC_TRIGGER_FREQ_HIGH;
     if (HAL_ADC_Init(&hadc1) != HAL_OK) {
         Error_Handler();
     }
-
-    /** Configure Regular Channel
-     */
-    sConfig.Channel = ADC_CHANNEL_0;
-    sConfig.Rank = ADC_REGULAR_RANK_1;
-    sConfig.SamplingTime = ADC_SAMPLINGTIME_COMMON_1;
-    if (HAL_ADC_ConfigChannel(&hadc1, &sConfig) != HAL_OK) {
-        Error_Handler();
-    }
-    /* USER CODE BEGIN ADC1_Init 2 */
-
     /* USER CODE END ADC1_Init 2 */
 }
 
@@ -620,8 +608,8 @@ static void MX_GPIO_Init(void) {
     GPIO_InitStruct.Pull = GPIO_NOPULL;
     HAL_GPIO_Init(GPIOF, &GPIO_InitStruct);
 
-    /*Configure GPIO pins : PA1 PA11 PA12 PA15 */
-    GPIO_InitStruct.Pin = GPIO_PIN_1 | GPIO_PIN_11 | GPIO_PIN_15;
+    /*Configure GPIO pins : PA11 PA12 PA15 */
+    GPIO_InitStruct.Pin = GPIO_PIN_11 | GPIO_PIN_12 | GPIO_PIN_15;
     GPIO_InitStruct.Mode = GPIO_MODE_ANALOG;
     GPIO_InitStruct.Pull = GPIO_NOPULL;
     HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
@@ -630,6 +618,11 @@ static void MX_GPIO_Init(void) {
     GPIO_InitStruct.Mode = GPIO_MODE_ANALOG;
     GPIO_InitStruct.Pull = GPIO_NOPULL;
     HAL_GPIO_Init(ANALOG_RNG.port, &GPIO_InitStruct);
+
+    GPIO_InitStruct.Pin = BAT_READ.pin;
+    GPIO_InitStruct.Mode = GPIO_MODE_ANALOG;
+    GPIO_InitStruct.Pull = GPIO_NOPULL;
+    HAL_GPIO_Init(BAT_READ.port, &GPIO_InitStruct);
 
     /*Configure GPIO pins : SUCCESS_SW_Pin FAILURE_SW_Pin INTERCEPT_SW_Pin
        LOCK2_TGL_Pin TIMER_SW_Pin LOCK0_TGL_Pin LOCK1_TGL_Pin */
@@ -703,7 +696,7 @@ static void MX_GPIO_Init(void) {
  * @param  htim : TIM handle
  * @retval None
  */
-void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim) {
+void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef* htim) {
     /* USER CODE BEGIN Callback 0 */
 
     /* USER CODE END Callback 0 */
@@ -737,7 +730,7 @@ void Error_Handler(void) {
  * @param  line: assert_param error line source number
  * @retval None
  */
-void assert_failed(uint8_t *file, uint32_t line) {
+void assert_failed(uint8_t* file, uint32_t line) {
     /* USER CODE BEGIN 6 */
     /* User can add his own implementation to report the file name and line
        number, ex: printf("Wrong parameters value: file %s on line %d\r\n",
@@ -757,6 +750,7 @@ void TIM14_IRQHandler(void) {
     /* USER CODE BEGIN TIM14_IRQn 1 */
     // 0x10000 - 16 bit rollover
     us_accumulator += 0x10000;
+
     /* USER CODE END TIM14_IRQn 1 */
 }
 
@@ -787,6 +781,7 @@ static void gpio_event(gpio_t gpio) {
 
 static callback_t serial_rxcomplete = NULL;
 static callback_t serial_txcomplete = NULL;
+static bool serial_lock = false;
 
 void serial_read(buffer_t dest, length_t length, callback_t oncomplete) {
     serial_rxcomplete = oncomplete;
@@ -794,18 +789,44 @@ void serial_read(buffer_t dest, length_t length, callback_t oncomplete) {
 }
 
 void serial_write(const buffer_t data, length_t length, callback_t oncomplete) {
+    // Poll ready
+    while (serial_lock) {
+        // Spinlock
+    }
+    serial_lock = true;
     serial_txcomplete = oncomplete;
     HAL_UART_Transmit_IT(&huart1, data, length);
 }
 
+void serial_print(const char* str) { serial_write(str, strlen(str), NULL); }
+
+#define MAX_SERIAL_PACKET (256)
+static char print_buffer[MAX_SERIAL_PACKET];
+
+void serial_printf(const char* fmt, ...) {
+    va_list args;
+    va_start(args, fmt);
+    vsnprintf(print_buffer, MAX_SERIAL_PACKET, fmt, args);
+    va_end(args);
+    serial_write(print_buffer, strlen(print_buffer), NULL);
+}
+
+void vserial_printf(const char* fmt, va_list args) {
+    vsnprintf(print_buffer, MAX_SERIAL_PACKET, fmt, args);
+    serial_write(print_buffer, strlen(print_buffer), NULL);
+}
+
 void serial_tx_complete_handler(int32_t status) {
+    // Should run in interrupt context
+    serial_lock = false;
     if (NULL != serial_txcomplete) {
-        serial_txcomplete(status);
+        task_immediate_signal(serial_txcomplete, status);
     }
 }
 void serial_rx_complete_handler(int32_t status) {
+    // Should run in interrupt context
     if (NULL != serial_rxcomplete) {
-        serial_rxcomplete(status);
+        task_immediate_signal(serial_rxcomplete, status);
     }
 }
 

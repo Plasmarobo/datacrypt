@@ -53,7 +53,8 @@ void task_signal(task_handle_t task, int32_t status);
 void task_abort(task_handle_t task);
 
 void scheduler_init();
-void scheduler_exec();  // Will not return
+void scheduler_exec();     // Single-step the scheduler
+void scheduler_freerun();  // Will not return
 
 #ifdef __cplusplus
 }

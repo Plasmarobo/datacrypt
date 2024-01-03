@@ -4,9 +4,8 @@
 
 #include "defs.h"
 
-#define MAX_TASKS (32)
+#define MAX_TASKS (64)
 
-static timespan_t us_accumulator;
 static timespan_t last_tick;
 static task_data_t tasks[MAX_TASKS];
 
@@ -127,8 +126,6 @@ void task_abort(task_handle_t task) {
 }
 
 void scheduler_init() {
-    last_tick = (timespan_t)microseconds();
-    us_accumulator = 0;
     for (uint8_t i = 0; i < MAX_TASKS; ++i) {
         tasks[i].handler = NULL;
         tasks[i].time = 0;
@@ -136,15 +133,15 @@ void scheduler_init() {
         tasks[i].type = TASK_FREE;
         tasks[i].status = 0;
     }
+    last_tick = microseconds();
 }
 
-void scheduler_exec()
-{
+void scheduler_exec() {
     timespan_t delta = 0;
-    timespan_t now = (timespan_t)microseconds();
+    timespan_t now = microseconds();
     if (last_tick > now) {
-        // Rollover
-        delta = now + CORRECT_ROLLOVER(last_tick);
+        // Rollover,
+        delta = now;
     } else {
         delta = now - last_tick;
     }

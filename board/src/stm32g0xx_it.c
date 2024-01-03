@@ -20,6 +20,7 @@
 /* Includes ------------------------------------------------------------------*/
 #include "stm32g0xx_it.h"
 
+#include "adc.h"
 #include "bsp.h"
 #include "i2c.h"
 #include "scheduler.h"
@@ -269,7 +270,7 @@ void ADC1_IRQHandler(void) {
     /* USER CODE END ADC1_IRQn 0 */
     HAL_ADC_IRQHandler(&hadc1);
     /* USER CODE BEGIN ADC1_IRQn 1 */
-    rng_update_handler(0);
+    adc_handler(0);
     /* USER CODE END ADC1_IRQn 1 */
 }
 
@@ -412,10 +413,12 @@ void HAL_I2C_ErrorCallback(I2C_HandleTypeDef* hi2c) {
 }
 
 void HAL_UART_TxCpltCallback(UART_HandleTypeDef* huart) {
-    task_immediate(serial_tx_complete_handler);
+    // Stay in interrupt context
+    serial_tx_complete_handler(0);
 }
 void HAL_UART_RxCpltCallback(UART_HandleTypeDef* huart) {
-    task_immediate(serial_rx_complete_handler);
+    // Stay in interrupt context
+    serial_rx_complete_handler(0);
 }
 
 void HAL_UART_ErrorCallback(UART_HandleTypeDef* huart) {

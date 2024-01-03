@@ -84,11 +84,11 @@ LEDS = [
     [68.1,35.34,0], [83.85,35.34,0], [98.55,35.34,0], [113.84,35.34,0],
     [68.08,20.09,0],[78.29, 20.09,0],[88.45, 20.09,0],[98.56, 20.09,0],[108.75, 20.09,0],[118.88, 20.09,0]
 ];
-USB_W = 10.32;
-USB_L = 10;
-USB_H = 3.5;
-USB_W_OFFSET = 5;
-USB = [-USB_W_OFFSET, 34.96,0];
+USB_W = 14;
+USB_L = 12;
+USB_H = 7;
+USB_W_OFFSET = 7;
+USB = [-USB_W_OFFSET, 34.96,-2];
 BUS_CONN = [58.44,10.09, 0];
 BUS_CONN_W = 50.8;
 BUS_CONN_L = 5.08;
@@ -399,10 +399,10 @@ module switchboard_back_panel()
         translate([20,40,-10]) power_switch();
     }
 }
-//rotate([180,0,0]) translate([0,0,-DISPLAY_CASE_H]) display();
+rotate([180,0,0]) translate([0,0,-DISPLAY_CASE_H]) display();
 //display_back();
 //translate([0,5,34]) rotate([75,0,0]) display();
 //switchboard_base();
-switchboard_front_panel();
+//switchboard_front_panel();
 //switchboard_back_panel();
 //color([0,0,1.0,0.1]) translate([70/2,-19,32]) rotate([71-90,0,0]) switchboard_back_panel();

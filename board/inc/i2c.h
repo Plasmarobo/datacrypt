@@ -7,7 +7,7 @@
 #include "bsp.h"
 // Wraps I2C Transactions
 
-#define I2C_TIMEOUT_MS (1000)
+#define I2C_TIMEOUT_MS (500)
 #define I2C_SUCCESS (0)
 #define I2C_BUSY (-1)
 #define I2C_ERR_TIMEOUT (-2)
