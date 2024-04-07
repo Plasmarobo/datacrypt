@@ -28,7 +28,7 @@ typedef uint32_t wave_t;
 #define CODEPOINT_PITCH (BYTES_PER_BYTE * 3)
 #define CODEPOINT_LENGTH (RST_BYTES + (BYTES_PER_BYTE * 3 * LED_COUNT))
 // Brightness from 0 to 255
-static uint16_t brightness = 255;
+static uint16_t brightness = 192;
 static bool _leds_busy = false;
 
 /*

@@ -21,7 +21,7 @@ APPDIR ?= app
 # debug build?
 DEBUG = 1
 # optimization
-OPT = -Og
+OPT = -Os
 
 
 #######################################
@@ -128,7 +128,8 @@ C_INCLUDES =  \
 -Idrivers/CMSIS/Device/ST/STM32G0xx/Include \
 -Idrivers/CMSIS/Include \
 -Iapp/inc \
--Iutils/inc
+-Iutils/inc \
+-Ithirdparty/littlefs
 
 CPP_INCLUDES += $(foreach dir,$(INCDIRS),-I$(dir))
 
@@ -138,7 +139,7 @@ ASFLAGS = $(MCU) $(AS_DEFS) $(AS_INCLUDES) $(OPT) -Wall -fdata-sections -ffuncti
 CFLAGS += $(MCU) $(C_DEFS) $(C_INCLUDES) $(OPT) -Wall -fdata-sections -ffunction-sections
 
 ifeq ($(DEBUG), 1)
-CFLAGS += -g -gdwarf-2
+CFLAGS += -g1 -gdwarf-2
 endif
 
 
@@ -153,15 +154,21 @@ CFLAGS += -MMD -MP -MF"$(@:%.o=%.d)" -std=c11
 LDSCRIPT = STM32G030C8Tx_FLASH.ld
 
 # libraries
-LIBS = -lc -lm -lnosys 
-LIBDIR = 
+LIBS = -lc -lm -lnosys -llfs
+LIBDIR = -L$(BUILD_DIR)
 LDFLAGS = $(MCU) -specs=nano.specs -T$(LDSCRIPT) $(LIBDIR) $(LIBS) -Wl,-Map=$(BUILD_DIR)/$(TARGET).map,--cref -Wl,--gc-sections
 
+.PHONY: lfs
+
 # default action: build all
-all: $(BUILD_DIR)/$(TARGET).elf $(BUILD_DIR)/$(TARGET).hex $(BUILD_DIR)/$(TARGET).bin
+all: $(BUILD_DIR)/$(TARGET).elf $(BUILD_DIR)/$(TARGET).hex $(BUILD_DIR)/$(TARGET).bin $(BUILD_DIR)/liblfs.a
 
 test:
 	make -C test
+
+$(BUILD_DIR)/liblfs.a:
+	make -C thirdparty/littlefs BUILDDIR=../../$(BUILD_DIR) \
+	CC=$(CC) AR=$(AR) SIZE=$(SIZE) CTAGS=$(CTAGS) NM=$(NM) OBJDUMP=$(OBJDUMP) VALGRIND=$(VALGRIND) GDB=$(GDB) PERF=$(PERF)
 
 #######################################
 # build the application

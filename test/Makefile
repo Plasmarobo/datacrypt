@@ -21,7 +21,7 @@ APPDIR = ./
 # debug build?
 DEBUG = 1
 # optimization
-OPT = -Og
+OPT = -Os
 
 
 #######################################
@@ -96,7 +96,7 @@ C_INCLUDES += $(foreach dir,$(INCDIRS),-I$(dir))
 CFLAGS += $(MCU) $(C_DEFS) $(C_INCLUDES) $(OPT) -Wall 
 
 ifeq ($(DEBUG), 1)
-CFLAGS += -g -gdwarf-2
+CFLAGS += -g1 -gdwarf-2
 endif
 
 

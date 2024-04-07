@@ -11,6 +11,7 @@ extern "C" {
 
 // What is the maximum slice to execute a thread or task
 #define SCHEDULE_TIMESLICE_US (1)
+#define FUTURE_TIMEOUT (-96)
 
 typedef enum {
     TASK_FREE = 0,
@@ -53,8 +54,14 @@ void task_signal(task_handle_t task, int32_t status);
 void task_abort(task_handle_t task);
 
 void scheduler_init();
-void scheduler_exec();     // Single-step the scheduler
+void scheduler_exec();     // Single-step the scheduler 
 void scheduler_freerun();  // Will not return
+
+// Async await
+// Returns a future or NULL
+callback_t future_get();
+// Pumps scheduler, returns when the future completes
+int32_t future_await(callback_t awaited_future, timespan_t timeout);
 
 #ifdef __cplusplus
 }

@@ -1,11 +1,12 @@
 #include "bsp.h"
 #include "i2c.h"
+#include "scheduler.h"
 
 // PCA9548APWR
 // I2C Multiplexer
 // Address 0x70 (7 bit) or 0xE0 (8 bit)
 #define MUX_ADDRESS (0x70)
-#define MUX_SETTLE_US (50)
+#define MUX_SETTLE_US (10)
 typedef enum {
     MUX_READY,
     MUX_BUSY,
@@ -28,7 +29,7 @@ static void mux_settle_handler(int32_t result) {
 static void display_selected_handler(int32_t result) {
     if (result != I2C_SUCCESS) {
         // Error! Try again
-        task_delayed(write_reg, MICROS(100));
+        task_delayed(write_reg, MICROS(MUX_SETTLE_US));
         return;
     }
     task_delayed(mux_settle_handler, MICROS(MUX_SETTLE_US));

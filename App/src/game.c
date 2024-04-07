@@ -2,9 +2,14 @@
 
 #include <stdarg.h>
 #include <stdint.h>
+#include <string.h>
 
 #include "bsp.h"
 #include "scheduler.h"
+
+#define LED_PERIOD_MS (33)
+#define DISPLAY_PERIOD_MS (33)
+#define INPUT_PERIOD_MS (100)
 
 #define TEAM_COUNT (2)
 
@@ -14,14 +19,17 @@ static team_t teams[TEAM_COUNT];
 static game_state_t gs;
 static task_handle_t timer_task;
 static task_handle_t anim_task;
-static const timespan_t ANIM_PERIOD_MS = 100;
-static const timespan_t TIMER_PERIOD_MS = 100;
+static const timespan_t ANIM_PERIOD_MS = 1;
+static const timespan_t TIMER_PERIOD_MS = 10;
 // One minute
 static const timespan_t TIMER_DURATION_MS = 20000;
 static timespan_t anim_duration_ms;
 static timespan_t anim_value_ms;
 static timespan_t timer_value_ms;
 static color_t timer_colors[6];
+static color_t counter_1_colors[4];
+static color_t counter_2_colors[4];
+static color_t display_colors[4];
 static const color_t GRN = {0, 255, 0};
 static const color_t RED = {255, 0, 0};
 static const color_t ORG = {252, 157, 30};
@@ -59,7 +67,7 @@ static color_t blend(color_t a, color_t b, uint8_t factor) {
     out.b = blend_channel(a.b, b.b, factor);
     return out;
 }
-
+static callback_t on_blank = NULL;
 static void blank_displays(int32_t status) {
     static uint8_t display_to_blank = 0;
     if (display_to_blank < DISPLAY_MAX) {
@@ -68,6 +76,9 @@ static void blank_displays(int32_t status) {
         ++display_to_blank;
     } else {
         display_to_blank = 0;
+        if (NULL != on_blank) {
+            on_blank(0);
+        }
     }
 }
 
@@ -76,8 +87,8 @@ static callback_t timer_callback = NULL;
 static void timer_handler(int32_t status) {
     timer_value_ms += TIMER_PERIOD_MS;
     if (timer_value_ms > TIMER_DURATION_MS) {
+        timer_value_ms = 0;
         gs = SCORE_PHASE;
-        blank_displays(0);
         if (NULL != timer_callback) {
             timer_callback(0);
         }
@@ -87,16 +98,11 @@ static void timer_handler(int32_t status) {
     color_t master_color;
     const color_t fade = {0, 0, 0};
 
-    if (timer_value_ms < (TIMER_DURATION_MS / 3)) {
-        master_color = GRN;
-    } else if (timer_value_ms < (2 * TIMER_DURATION_MS / 3)) {
-        master_color = ORG;
-    } else {
-        master_color = RED;
-    }
-    // Convert to fixed point
     uint8_t v = (uint8_t)((255 * (TIMER_DURATION_MS - timer_value_ms) /
                            TIMER_DURATION_MS));
+
+    master_color = blend(GRN, RED, v);
+    // Convert to fixed point
     timer_colors[0] = blend(fade, master_color, clamp(255 - v, 255, 255 - 42));
     timer_colors[1] =
         blend(fade, master_color, clamp(255 - v, 255 - 42, 255 - 84));
@@ -108,7 +114,6 @@ static void timer_handler(int32_t status) {
         blend(fade, master_color, clamp(255 - v, 255 - 168, 255 - 210));
     timer_colors[5] = blend(fade, master_color, clamp(255 - v, 255 - 210, 0));
     set_timer(timer_colors);
-    leds_write();
 }
 
 static void start_timer(callback_t cb) {
@@ -119,6 +124,7 @@ static void start_timer(callback_t cb) {
 
 static callback_t anim_callback = NULL;
 static word_t current_word;
+static uint8_t disp = 0;
 
 static void random_word(int32_t status);
 
@@ -127,28 +133,59 @@ static void anim_handler(int32_t status) {
         default:
             break;
     }*/
-    task_delayed(random_word, MILLIS(ANIM_PERIOD_MS));
+    ++disp;
+    if (disp < DISPLAY_MAX) {
+        task_immediate(random_word);
+    } else {
+        disp = 0;
+        task_delayed(random_word, MILLIS(ANIM_PERIOD_MS));
+    }
 }
 
 static void random_word(int32_t status) {
-    uint16_t rword = uniform(0, word_count());
-    uint8_t rx = uniform(0, 8);
-    uint8_t ry = uniform(0, 8);
-    uint8_t rd = uniform(0, 8);
-    dbgprintf("RW %d RX %d RY %d RD %d\r\n", rword, rx, ry, rd);
-    get_word(rword, &current_word);
-    display_clear();
-    display_set_text(rx, ry, current_word, strlen(current_word));
-    display_show(rd, anim_handler);
+    bool skip = false;
+    switch (disp) {
+        case 0:
+        case 1:
+            skip = gpio_get(LOCK0_TGL);
+            break;
+        case 2:
+        case 3:
+            skip = gpio_get(LOCK1_TGL);
+            break;
+        case 4:
+        case 5:
+            skip = gpio_get(LOCK2_TGL);
+            break;
+        case 6:
+        case 7:
+            skip = gpio_get(LOCK3_TGL);
+            break;
+        default:
+            break;
+    }
+    if (skip) {
+        uint16_t rword = uniform(0, words_count());
+        uint8_t rx = 0;  // uniform(0, 8);
+        uint8_t ry = 0;  // uniform(0, 8);
+        words_get(rword, &current_word);
+        display_clear();
+        display_set_text(rx, ry, current_word, strlen(current_word));
+        display_show(disp, anim_handler);
+    } else {
+        task_immediate(anim_handler);
+    }
 }
 
 static void start_animation(callback_t cb, timespan_t duration_ms) {
     anim_callback = cb;
     anim_duration_ms = duration_ms;
     anim_value_ms = 0;
+    on_blank = anim_handler;
     blank_displays(0);
-    anim_task = task_delayed(anim_handler, MILLIS(ANIM_PERIOD_MS));
 }
+
+static void led_handler() { leds_write(); }
 
 static void game_handler(int32_t status) {
     switch (gs) {
@@ -183,6 +220,7 @@ void game_init(int32_t status) {
     opposing_team = TEAM_B;
     gs = SCORE_PHASE;
     task_delayed(game_handler, MILLIS(2000));
+    task_periodic(led_handler, MILLIS(LED_PERIOD_MS));
 }
 
 void game_update(int32_t status) {}

@@ -495,6 +495,10 @@ static void MX_TIM3_Init(void) {
     HAL_TIM_Base_Start_IT(&htim3);
     /* USER CODE END TIM3_Init 2 */
     HAL_TIM_MspPostInit(&htim3);
+
+    // 50% duty cicle
+    TIM3->CCR1 = 0x80;
+    TIM3->CCR2 = 0x80;
 }
 
 /**

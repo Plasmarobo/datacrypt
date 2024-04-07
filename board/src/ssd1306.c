@@ -17,6 +17,8 @@
 #define CMD_HEADER (0x00)
 #define DATA_HEADER (0x40)
 
+#define CMD_RESET (0xE4)
+
 // One value byte
 #define CMD_SET_CONTRAST (0x81)
 #define CONTRAST_VALUE (0x80)
@@ -72,15 +74,15 @@
 #define MUX_ENABLE_DELAY_MS (100)
 #define DISPLAY_TASK_PERIOD_MS (100)
 #define DISPLAY_STATE_STACK_DEPTH (8)
-#define DISPLAY_COMMAND_BUFFER_DEPTH (32)
-#define DISPLAY_PAGE_BUFFER_DEPTH (1 + 128)
+#define DISPLAY_COMMAND_BUFFER_DEPTH (33)
+// Extra byte to auto-increment mem
 #define DISPLAY_FRAMEBUFFER_DEPTH ((128 / 8) * 64)
 #define PAGE_WIDTH (128)
 #define FB_LOCKED (0x01)
 #define HW_LOCKED (0x02)
 
-static uint8_t framebuffer[DISPLAY_FRAMEBUFFER_DEPTH];
-static uint8_t page_buffer[DISPLAY_PAGE_BUFFER_DEPTH];
+static uint8_t data_buffer[1 + DISPLAY_FRAMEBUFFER_DEPTH];
+static uint8_t* const framebuffer = data_buffer + 1;
 static uint8_t command_buffer[DISPLAY_COMMAND_BUFFER_DEPTH];
 
 static uint8_t selected_display;
@@ -88,24 +90,20 @@ static uint8_t display_pages;
 static callback_t user_callback = NULL;
 static callback_t callback_cache;
 static state_t* current_state;
-static uint8_t* page_ptr;
 
 static void display_page(callback_t oncomplete);
 static void display_command(length_t arg_len, callback_t oncomplete);
 static void next_state(int32_t status);
 static void update_state(int32_t status);
-static void write_page(uint8_t page);
+;
 static void draw_pixel(uint16_t x, uint16_t y, uint8_t value);
 static void draw_rect(uint16_t x, uint16_t y, uint16_t w, uint16_t h);
 static uint8_t get_height() { return ((selected_display % 2) == 0) ? 64 : 32; }
-static uint8_t get_pages() { return ((selected_display % 2) == 0) ? 7 : 3; }
 
 DECLARESTATE(dfsm, idle);
 DECLARESTATE(dfsm, init);
 DECLARESTATE(dfsm, setup);
 DECLARESTATE(dfsm, write_display);
-DECLARESTATE(dfsm, write_page);
-DECLARESTATE(dfsm, select_page);
 
 // clang-format off
 RINGBUFFER(state_queue, state_t*, DISPLAY_STATE_STACK_DEPTH);
@@ -118,7 +116,6 @@ static void init_next(int32_t status)
 
 STATE_ENTER(dfsm, init)
 {
-    serial_printf("Display: %d\r\n", selected_display);
     if (selected_display < DISPLAY_MAX)
     {
         user_callback = init_next;
@@ -142,78 +139,52 @@ STATE(dfsm,init,enter);
 
 STATE_ENTER(dfsm,setup)
 {   
-    command_buffer[1] = CMD_SLEEP;
-    command_buffer[2] = CMD_MULTIPLEX_RATIO;
-    command_buffer[3] = get_height() - 1;
-    command_buffer[4] = CMD_ADDR_MODE;
-    command_buffer[5] = ADDR_MODE_HORZ;
-    command_buffer[6] = CMD_SET_COLUMN;
-    command_buffer[7] = 0;
-    command_buffer[8] = 127;
-    command_buffer[9] = CMD_SET_PAGE;
-    command_buffer[10] = 0;
-    command_buffer[11] = get_pages();
-    command_buffer[12] = CMD_START_LINE_ADDR;
-    command_buffer[13] = CMD_DISPLAY_OFFSET;
-    command_buffer[14] = 0;
-    command_buffer[15] = CMD_SEGMENT_MODE_ALT;
-    command_buffer[16] = CMD_SCAN_DIRECTION_ALT;
-    command_buffer[17] = CMD_HW_PIN_CONF;
-    command_buffer[18] = ((selected_display % 2) == 0) ? 0x12 : 0x02;
-    command_buffer[19] = CMD_SET_CONTRAST;
-    command_buffer[20] = 0x7F;
-    command_buffer[21] = CMD_DISPLAY_RAM;
-    command_buffer[22] = CMD_NONINVERTED_MODE;
-    command_buffer[23] = CMD_DIVIDER;
-    command_buffer[24] = 0x80;
-    command_buffer[25] = CMD_PRECHARGE_PERIOD;
-    command_buffer[26] = 0xC2;
-    command_buffer[27] = CMD_VCOMH_DESELECT;
-    command_buffer[28] = 0x40;
-    command_buffer[29] = CMD_ENABLE_CHARGE_PUMP;
-    command_buffer[30] = 0x14;
-    command_buffer[31] = CMD_WAKE;
+    uint8_t *cmd_ptr = command_buffer + 1;
+    *cmd_ptr = CMD_SLEEP;
+    ++cmd_ptr; *cmd_ptr = CMD_MULTIPLEX_RATIO;
+    ++cmd_ptr; *cmd_ptr = get_height() - 1;
+    ++cmd_ptr; *cmd_ptr = CMD_ADDR_MODE;
+    ++cmd_ptr; *cmd_ptr = ADDR_MODE_HORZ;
+    ++cmd_ptr; *cmd_ptr = CMD_SET_COLUMN;
+    ++cmd_ptr; *cmd_ptr = 0;
+    ++cmd_ptr; *cmd_ptr = 127;
+    ++cmd_ptr; *cmd_ptr = CMD_SET_PAGE;
+    ++cmd_ptr; *cmd_ptr = 0;
+    ++cmd_ptr; *cmd_ptr = 7;
+    ++cmd_ptr; *cmd_ptr = CMD_START_LINE_ADDR;
+    ++cmd_ptr; *cmd_ptr = CMD_DISPLAY_OFFSET;
+    ++cmd_ptr; *cmd_ptr = 0;
+    ++cmd_ptr; *cmd_ptr = CMD_SEGMENT_MODE_ALT;
+    ++cmd_ptr; *cmd_ptr = CMD_SCAN_DIRECTION_ALT;
+    ++cmd_ptr; *cmd_ptr = CMD_HW_PIN_CONF;
+    ++cmd_ptr; *cmd_ptr = ((selected_display % 2) == 0) ? 0x12 : 0x02;
+    ++cmd_ptr; *cmd_ptr = CMD_SET_CONTRAST;
+    ++cmd_ptr; *cmd_ptr = 0x7F;
+    ++cmd_ptr; *cmd_ptr = CMD_DISPLAY_RAM;
+    ++cmd_ptr; *cmd_ptr = CMD_NONINVERTED_MODE;
+    ++cmd_ptr; *cmd_ptr = CMD_DIVIDER;
+    ++cmd_ptr; *cmd_ptr = 0x80;
+    ++cmd_ptr; *cmd_ptr = CMD_PRECHARGE_PERIOD;
+    ++cmd_ptr; *cmd_ptr = 0xC2;
+    ++cmd_ptr; *cmd_ptr = CMD_VCOMH_DESELECT;
+    ++cmd_ptr; *cmd_ptr = 0x40;
+    ++cmd_ptr; *cmd_ptr = CMD_ENABLE_CHARGE_PUMP;
+    ++cmd_ptr; *cmd_ptr = 0x14;
+    ++cmd_ptr; *cmd_ptr = CMD_WAKE;
     QUEUESTATE(dfsm, write_display);
     display_command(32, next_state);
 };
 STATE(dfsm,setup,enter);
 STATE_ENTER(dfsm, write_display)
 {
-    display_pages = get_pages();
-    page_ptr = framebuffer;
-    QUEUESTATE(dfsm, select_page);
-    next_state(0);
-};
-STATE(dfsm, write_display, enter);
-STATE_ENTER(dfsm, select_page)
-{
-    command_buffer[1] = CMD_SET_PAGE;
-    command_buffer[2] = 0;
-    command_buffer[3] = 0xFF;
-    command_buffer[4] = CMD_SET_COLUMN;
-    command_buffer[5] = 0;
-    command_buffer[6] = 127;
-    QUEUESTATE(dfsm, write_page);
-    display_command(7, next_state);
-};
-STATE(dfsm, select_page, enter);
-STATE_ENTER(dfsm, write_page)
-{
     display_page(update_state);
 };
-STATE_UPDATE(dfsm, write_page)
+STATE_UPDATE(dfsm, write_display)
 {
-    if (page_ptr < (framebuffer + DISPLAY_FRAMEBUFFER_DEPTH))
-    {
-        display_page(update_state);
-    }
-    else
-    {
-        selected_display += 1;
-        task_immediate(next_state);
-    }
+    selected_display += 1;
+    task_immediate(next_state);
 }
-STATE(dfsm, write_page, enter, update);
+STATE(dfsm, write_display, enter, update);
 STATE_ENTER(dfsm, idle) {
     if (NULL != user_callback)
     {
@@ -291,19 +262,8 @@ static void display_command(length_t data_size, callback_t on_complete) {
 }
 
 static void display_page(callback_t on_complete) {
-    page_buffer[0] = DATA_HEADER;
-    uint16_t height = get_height();
-    memcpy(page_buffer + 1, page_ptr, PAGE_WIDTH);
-    page_ptr += PAGE_WIDTH;
-    // Pages need to be converted to columnar data
-    start_transaction(page_buffer, DISPLAY_PAGE_BUFFER_DEPTH, on_complete);
-}
-
-static void display_complete(int32_t status) {
-    if (NULL != user_callback) {
-        user_callback(status);
-        user_callback = NULL;
-    }
+    data_buffer[0] = DATA_HEADER;
+    start_transaction(data_buffer, DISPLAY_FRAMEBUFFER_DEPTH + 1, on_complete);
 }
 
 static void draw_rect(uint16_t x, uint16_t y, uint16_t w, uint16_t h) {

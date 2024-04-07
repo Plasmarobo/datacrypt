@@ -327,5 +327,43 @@ TEST_CASE("Scheduler abort from task", "[scheduler]")
     tick(999);
     scheduler_exec();
     REQUIRE(a == 0);
+}
 
+static callback_t future_cb;
+
+static void nonblocking_op(callback_t on_complete)
+{
+    future_cb = on_complete;
+    task_delayed_unique_signal(resolve_blocking, 10, 3);
+}
+
+static void resolve_blocking(int32_t status)
+{
+    if (NULL != future_cb)
+    {
+        future_cb(status);
+        future_cb = NULL;
+    }
+}
+
+TEST_CASE("Scheduler future await execution", "[futures]")
+{
+    int32_t status = 0;
+    scheduler_init();
+    // Acquire a future
+    callback_t future = future_get();
+    // Simulate nonblocking op
+    nonblocking_op(future);
+    // Await op
+    status = future_await(future);
+    REQUIRE(status == 3);
+}
+
+TEST_CASE("Scheduler nested future rejected", "[futures]")
+{
+    scheduler_init();
+    future_t a = future_get();
+    future_t b = future_get();
+    REQUIRE(a != NULL);
+    REQUIRE(b == NULL);
 }

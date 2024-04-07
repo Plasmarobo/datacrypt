@@ -5,7 +5,8 @@
 #include "scheduler.h"
 
 #define I2C_QUEUE_LENGTH (4)
-#define MAX_I2C_MESSAGE_LENGTH (128)
+// 1024 bytes of display memory + 1 byte preamble
+#define MAX_I2C_MESSAGE_LENGTH (1025)
 
 #define I2C_FLAG_READ (1)
 #define I2C_FLAG_WRITE (0)
@@ -28,8 +29,9 @@ static void i2c_timeout_handler(int32_t status) {
         HAL_I2C_Master_Abort_IT(&hi2c1, current_txn.address);
         timeout_task = NULL;
         if (NULL != current_txn.callback) {
-            current_txn.callback(I2C_ERR_TIMEOUT);
+            task_immediate_signal(current_txn.callback, I2C_ERR_TIMEOUT);
         }
+        i2c_status = I2C_SUCCESS;
     }
 }
 
@@ -78,6 +80,7 @@ void i2c_complete_handler(int32_t status) {
     if (NULL != current_txn.callback) {
         current_txn.callback(i2c_status);
     }
+    i2c_status = I2C_SUCCESS;
 }
 
 int32_t i2c_get_status(void) { return i2c_status; }

@@ -8,6 +8,8 @@
 
 static timespan_t last_tick;
 static task_data_t tasks[MAX_TASKS];
+static callback_t future_waiting;
+static int32_t future_status;
 
 static task_data_t* get_free_task() {
     for (uint8_t i = 0; i < MAX_TASKS; ++i) {
@@ -134,6 +136,7 @@ void scheduler_init() {
         tasks[i].status = 0;
     }
     last_tick = microseconds();
+    future_waiting = NULL;
 }
 
 void scheduler_exec() {
@@ -193,4 +196,42 @@ void scheduler_freerun() {
     while (1) {
         scheduler_exec();
     }
+}
+
+// Handles resolving callback
+static void future_resolve(int32_t status)
+{
+    future_waiting = NULL;
+    future_status = status;
+}
+
+// Gives us a callback to pass to a nonblocking op
+// Allows tasks to run while we wait, limited to 1 parallel future
+callback_t future_get()
+{
+    if (NULL != future_waiting)
+    {
+        return NULL;
+    }
+    future_status = 0;
+    future_waiting = &future_resolve;
+    return future_waiting;
+}
+
+// Spins until the callback resolves, moves status back into blocking context
+int32_t future_await(callback_t awaited_future, timespan_t timeout)
+{
+   
+    // We only support ONE future to bound the stack/scheduler depth
+    timespan_t start = microseconds();
+    while(NULL != future_waiting)
+    {
+        scheduler_exec();
+        if ((microseconds() - start) > timeout)
+        {
+            future_resolve(FUTURE_TIMEOUT);
+            break;
+        }
+    }
+    return future_status;
 }

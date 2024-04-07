@@ -7,7 +7,8 @@
 
 typedef char word_t[MAX_WORD_LENGTH];
 
-uint16_t word_count();
-void get_word(uint16_t word, word_t* storage);
+void words_init(void);
+uint32_t words_count(void);
+void words_get(uint32_t index, word_t* storage);
 
 #endif  // WORDS_H
