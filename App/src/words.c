@@ -9,7 +9,7 @@ static uint32_t num_words = 0;
 
 void words_init(void)
 {
-    file_open("words.txt");
+    file_open(WORDS_DB);
     file_read((uint8_t*)&num_words, sizeof(uint32_t));
 }
 

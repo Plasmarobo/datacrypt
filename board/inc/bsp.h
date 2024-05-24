@@ -54,7 +54,7 @@ extern "C" {
 
 /* USER CODE END EM */
 
-void HAL_TIM_MspPostInit(TIM_HandleTypeDef* htim);
+void HAL_TIM_MspPostInit(TIM_HandleTypeDef *htim);
 
 /* Exported functions prototypes ---------------------------------------------*/
 void Error_Handler(void);
@@ -67,7 +67,7 @@ void Error_Handler(void);
 
 typedef struct {
     uint16_t pin;
-    GPIO_TypeDef* port;
+    GPIO_TypeDef *port;
     bool value;
     callback_t cb;
 } gpio_t;
@@ -151,7 +151,7 @@ bool leds_busy(void);
 void leds_tx_complete_handler(int32_t status);
 void leds_error_handler(int32_t status);
 
-void leds_set(uint32_t offset, uint8_t size, color_t* color);
+void leds_set(uint32_t offset, uint8_t size, color_t *color);
 // convenience functions
 void set_displed(color_t color[DISPLED_STATUS_LENGTH]);
 void set_counter0(color_t color[COUNTER_LENGTH]);
@@ -183,7 +183,7 @@ void display_mux_enable();
 void display_select(uint8_t index, callback_t on_complete);
 uint8_t display_get_selected();
 void display_set_inverted(bool inv, callback_t oncomplete);
-void display_set_text(uint8_t x, uint8_t y, const char* text, length_t length);
+void display_set_text(uint8_t x, uint8_t y, const char *text, length_t length);
 void display_blit(uint8_t x, uint8_t y, const buffer_t img, uint8_t width,
                   uint8_t height);
 void display_clear(void);
@@ -207,6 +207,9 @@ void flash_read(flash_page_address_t bp_addr, uint16_t byte_address_,
                 buffer_t dest, length_t size, callback_t on_complete);
 void flash_write(flash_page_address_t page, uint16_t byte_address_,
                  buffer_t data, length_t size, callback_t on_complete);
+void flash_commit(callback_t on_complete);
+void flash_update(flash_page_address_t page, uint16_t byte_address_,
+                  buffer_t data, length_t size, callback_t on_complete);
 void flash_erase(uint32_t addr, callback_t on_complete);
 void flash_tx_complete_handler(int32_t status);
 void flash_rx_complete_handler(int32_t status);
@@ -214,9 +217,9 @@ void flash_rx_complete_handler(int32_t status);
 // ========== Serial Comm ==========
 void serial_read(buffer_t dest, length_t length, callback_t oncomplete);
 void serial_write(const buffer_t data, length_t length, callback_t oncomplete);
-void serial_print(const char* str);
-void serial_printf(const char* fmt, ...);
-void vserial_printf(const char* fmt, va_list args);
+void serial_print(const char *str);
+void serial_printf(const char *fmt, ...);
+void vserial_printf(const char *fmt, va_list args);
 void serial_tx_complete_handler(int32_t status);
 void serial_rx_complete_handler(int32_t status);
 

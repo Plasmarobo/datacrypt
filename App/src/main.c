@@ -15,6 +15,7 @@ int main() {
     display_init(game_init);
     // flash_init(NULL);
     serial_write("\r\nBOOT\r\n", 8, NULL);
+    rpc_init();
     scheduler_freerun();
     return 0;
 }

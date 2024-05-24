@@ -1,10 +1,9 @@
 #include "bsp.h"
+#include "flash.h"
 #include "fsm.h"
 #include "ringbuffer.h"
 #include "scheduler.h"
 #include "stack.h"
-#include "lfs.h"
-#include "flash.h"
 
 // Used to generate 8 dummy clocks
 #define TIMING_BYTE (0x00)
@@ -23,7 +22,6 @@
 #define PROGRAM_DATA_LOAD (0x02)
 // Loads data to be programmed into chip buffer, does not alter rest
 #define RANDOM_PROGRAM_DATA_LOAD (0x84)
-#define QUAD_PROGRAM_DATA_LOAD (0x34)
 // Commits program buffer to FLASH
 #define PROGRAM_EXECUTE (0x10)
 
@@ -60,19 +58,7 @@
 #define STATUS_ECCS0 (0x10)
 #define STATUS_ECCS1 (0x20)
 
-#define PAGE_MASK (0x1F)
-#define BLOCK_MASK (0xFFE0)
-#define BLOCK(x) ((x & BLOCK_MASK) >> 5)
-#define PAGE(x) (x & PAGE_MASK)
-
 #define BYTE_MASK (0x07FF)
-#define ERASED_VALUE (0xFF)
-#define BAD_BLOCK_VALUE (0x18)
-#define PAGE_ADDRESS(block, page) \
-    (((block << 5) & BLOCK_MASK) | (page & PAGE_MASK))
-#define PAGE_OFFSET(offset) (offset / PAGE_SIZE)
-
-#define OOB_BASE_ADDRESS (PAGE_SIZE)
 
 typedef struct {
     buffer_t data;
@@ -111,6 +97,7 @@ static void bad_block_scan_start(int32_t status);
 static void flash_write_cache(uint16_t byte_address, buffer_t source,
                               length_t length);
 static void query_jedec(int32_t status);
+static void flash_stream_data(int32_t status);
 static void flash_flush_cache(int32_t status);
 static void write_bbt(int32_t status);
 static void read_status(int32_t status);
@@ -146,6 +133,14 @@ static void read_cache(int32_t status) {
     command_buffer[2] = byte_address & 0xFF;
     command_buffer[3] = TIMING_BYTE;
     write(command_buffer, 4, read_bytes);
+}
+
+// Write cache from memroy buffer
+static void write_cache(int32_t status) {
+    command_buffer[0] = RANDOM_PROGRAM_DATA_LOAD;
+    command_buffer[1] = (byte_address >> 8) & 0xFF;
+    command_buffer[2] = byte_address & 0xFF;
+    write(command_buffer, 3, flash_stream_data);
 }
 
 // Fetch selected register/feature from chip
@@ -198,7 +193,6 @@ static void mark_bbt_page_1(int32_t status) {
     flash_write_cache(block_page_address + 1, &general_buffer, 1);
 }
 
-
 static void mark_bad_block(int32_t status) {
     general_buffer = BAD_BLOCK_VALUE;
     stack_push(&op_stack, &flash_flush_cache);
@@ -210,13 +204,10 @@ static void mark_bad_block(int32_t status) {
     flash_write_cache(block_page_address, &general_buffer, 1);
 }
 
-static void check_bbt_value(int32_t status)
-{
-    if (FLASH_SUCCESS == status)
-    {
-        if (BAD_BLOCK_VALUE == general_buffer)
-        {
-            //Block is bad!
+static void check_bbt_value(int32_t status) {
+    if (FLASH_SUCCESS == status) {
+        if (ERASED_VALUE != general_buffer) {
+            // Block is bad!
             block_bad = true;
         }
         if (!(block_page_address & PAGE_MASK)) {
@@ -236,7 +227,7 @@ static void check_bad_block(int32_t status) {
     // Load first page
     block_bad = false;
     block_page_address = block_page_address & BLOCK_MASK;
-    byte_address = OOB_BASE_ADDRESS; // First byte in OOB
+    byte_address = OOB_BASE_ADDRESS;  // First byte in OOB
     general_buffer = ERASED_VALUE;
     stack_push(&op_stack, &check_bbt_value);
     populate_cache(FLASH_SUCCESS);
@@ -256,8 +247,7 @@ static void flash_reset(int32_t status) {
 
 // Warning: this conducts the actual block erase, check bbt first
 static void block_erase(int32_t status) {
-    if (FLASH_SUCCESS == status)
-    {
+    if (FLASH_SUCCESS == status) {
         command_buffer[0] = BLOCK_ERASE;
         command_buffer[1] = TIMING_BYTE;
         command_buffer[2] = (block_page_address >> 8) & 0xFF;
@@ -265,15 +255,12 @@ static void block_erase(int32_t status) {
         cache_dirty = true;
         config_polling_op(MILLIS(TERASE_MS), FLASH_TIMEOUT_MS);
         write(command_buffer, 4, status_poll);
-    }
-    else
-    {
+    } else {
         op_handler_pop(FLASH_ERR_BAD_STATE);
     }
 };
 
-static void flash_erase_block(flash_page_address_t address)
-{
+static void flash_erase_block(flash_page_address_t address) {
     block_page_address = address & BLOCK_MASK;
     stack_push(&op_stack, &block_erase);
     stack_push(&op_stack, &check_bad_block);
@@ -289,7 +276,7 @@ static void flash_stream_data(int32_t status) {
 // First call will set cache to 0xFF
 // Page must have been previously erased
 // Flash can only write down
-static void flash_write_cache(uint16_t byte_address, buffer_t source,
+static void flash_write_cache(uint16_t byte_address_, buffer_t source,
                               length_t length) {
     cache_dirty = true;
     if (0 == bytes_written) {
@@ -297,12 +284,20 @@ static void flash_write_cache(uint16_t byte_address, buffer_t source,
     } else {
         command_buffer[0] = RANDOM_PROGRAM_DATA_LOAD;
     }
-    command_buffer[1] = (byte_address >> 8) & 0xFF;
-    command_buffer[2] = byte_address & 0xFF;
+    command_buffer[1] = (byte_address_ >> 8) & 0xFF;
+    command_buffer[2] = byte_address_ & 0xFF;
     current_transaction.data = source;
     current_transaction.size = length;
     write(command_buffer, 3, flash_stream_data);
 };
+
+static void flash_modify_cache(uint16_t byte_addres_, buffer_t source,
+                               length_t length) {
+    cache_dirty = true;
+    current_transaction.data = source;
+    current_transaction.size = length;
+    write_cache(FLASH_SUCCESS);
+}
 
 // Flushes write-cache to flash
 static void flash_program(int32_t status) {
@@ -371,7 +366,8 @@ static void check_status(int32_t status) {
             // Block has a stuck bit, mark bad
             // Note: error correction may be able to handle one bit of error...
             block_page_address &= BLOCK_MASK;
-            // Note: ops should handle bad block without altering the block_page_address
+            // Note: ops should handle bad block without altering the
+            // block_page_address
             op_handler_pop(FLASH_ERR_BAD_BLOCK);
             mark_bad_block(FLASH_SUCCESS);
         } else if (feature_value & (STATUS_ERASE_FAIL | STATUS_PROG_FAIL)) {
@@ -420,11 +416,28 @@ void flash_write(flash_page_address_t page, uint16_t byte_address_,
                  buffer_t data, length_t size, callback_t on_complete) {
     if (lock_flash(on_complete)) {
         if (block_page_address == page && cache_dirty) {
-            // We are on the same page as previous operations, can use random access
-            // (or it's the first write, and we can start our write op)
+            // We are on the same page as previous operations, can use random
+            // access (or it's the first write, and we can start our write op)
             flash_write_cache(byte_address_, data, size);
         } else {
             op_handler_pop(FLASH_ERR_CACHE_OVERWRITE);
+        }
+    }
+}
+
+// Perform a read-modify-write on a page - read in if it's the first op
+void flash_update(flash_page_address_t page, uint16_t byte_address_,
+                  buffer_t data, length_t size, callback_t on_complete) {
+    if (lock_flash(on_complete)) {
+        byte_address = byte_address_;
+        current_transaction.size = size;
+        current_transaction.data = data;
+        if (block_page_address == page && cache_dirty) {
+            write_cache(FLASH_SUCCESS);
+        } else {
+            block_page_address = page;
+            stack_push(&op_stack, &write_cache);
+            populate_cache(FLASH_SUCCESS);
         }
     }
 }

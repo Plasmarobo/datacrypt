@@ -1,199 +1,194 @@
 #include "filesystem.h"
 
-#include "lfs.h"
-#include "lfs_util.h"
+#include <stdint.h>
 
 #include "bsp.h"
 #include "flash.h"
+#include "popcnt.h"
+#include "scheduler.h"
 
-#define LFS_BUFFER_LEN (32)
-#define LFS_LOOKAHEAD (32)
 #define FILESYSTEM_TIMEOUT_MS (500)
+// We can tolerate one bit of error - at two the block is marked bad
 
-static int lfs_flash_read(const struct lfs_config *c, lfs_block_t block,
-            lfs_off_t off, void *buffer, lfs_size_t size);
-static int lfs_flash_prog(const struct lfs_config *c, lfs_block_t block,
-        lfs_off_t off, const void *buffer, lfs_size_t size);
-static int lfs_flash_erase(const struct lfs_config *c, lfs_block_t block);
-static int lfs_flash_sync(const struct lfs_config *c);
+typedef uint32_t bbt_t;
+// Result of log2(block_count)
+#define BBT_LOG2 (5)
+//
+#define BBT_MASK (0x1F)
+// BBT lives at start of flash
+#define BBT_BASE_ADDRESS (0)
+#define BBT_WORDS (BLOCK_COUNT >> BBT_LOG2)
+#define BBT_MAGIC (0xBADB10C0)
 
-static uint8_t lfs_read_buffer[LFS_BUFFER_LEN];
-static uint8_t lfs_write_buffer[LFS_BUFFER_LEN];
-static uint8_t lfs_cache_buffer[LFS_BUFFER_LEN];
-static uint8_t lfs_lookahead_buffer[LFS_BUFFER_LEN];
+// Bit shift should match log2(sizeof(bbt_t))
+static bbt_t bad_block_table[BBT_WORDS];
 
-static struct lfs_config lfs_cfg = {
+#define BLOCK_SIZE (PAGES_PER_BLOCK * PAGE_SIZE)
+#define INVALID_ADDRESS (BLOCK_COUNT * BLOCK_SIZE)
 
-    // Opaque user provided context that can be used to pass
-    // information to the block device operations
-    .context = NULL,
-    // Read a region in a block. Negative error codes are propagated
-    // to the user.
-    .read = lfs_flash_read,
-    .prog = lfs_flash_prog,
-    .erase = lfs_flash_erase,
-    .sync = lfs_flash_sync,
-
-    // Align to 32 byte read/write 
-    .read_size = LFS_BUFFER_LEN, // Our chip supports up to 1 byte reads, but loads a page into cache
-    .prog_size = PAGE_SIZE,
-    .block_size = PAGES_PER_BLOCK * PAGE_SIZE,
-    .block_count = BLOCK_COUNT,
-    .block_cycles = 500, // arbitrary
-
-    .cache_size = LFS_BUFFER_LEN,
-
-    .lookahead_size = LFS_LOOKAHEAD,
-    .compact_thresh = 0,
-    .read_buffer = &lfs_read_buffer,
-    .prog_buffer = &lfs_write_buffer,
-
-    // Optional statically allocated lookahead buffer. Must be lookahead_size.
-    // By default lfs_malloc is used to allocate this buffer.
-    .lookahead_buffer = lfs_lookahead_buffer,
-
-    // Optional upper limit on length of file names in bytes. No downside for
-    // larger names except the size of the info struct which is controlled by
-    // the LFS_NAME_MAX define. Defaults to LFS_NAME_MAX when zero. Stored in
-    // superblock and must be respected by other littlefs drivers.
-    .name_max = LFS_NAME_MAX,
-    // Optional upper limit on files in bytes. No downside for larger files
-    // but must be <= LFS_FILE_MAX. Defaults to LFS_FILE_MAX when zero. Stored
-    // in superblock and must be respected by other littlefs drivers.
-    .file_max = LFS_FILE_MAX,
-
-    // Optional upper limit on custom attributes in bytes. No downside for
-    // larger attributes size but must be <= LFS_ATTR_MAX. Defaults to
-    // LFS_ATTR_MAX when zero.
-    .attr_max = LFS_ATTR_MAX,
-
-    // Optional upper limit on total space given to metadata pairs in bytes. On
-    // devices with large blocks (e.g. 128kB) setting this to a low size (2-8kB)
-    // can help bound the metadata compaction time. Must be <= block_size.
-    // Defaults to block_size when zero.
-    .metadata_max = 0,
-
-    // Optional upper limit on inlined files in bytes. Inlined files live in
-    // metadata and decrease storage requirements, but may be limited to
-    // improve metadata-related performance. Must be <= cache_size, <=
-    // attr_max, and <= block_size/8. Defaults to the largest possible
-    // inline_max when zero.
-    //
-    // Set to -1 to disable inlined files.
-    .inline_max = 0
-};
-
-static lfs_t lfs;
-static lfs_file_t file;
-
-static int get_lfs_err(int32_t status)
-{
-    int err = LFS_ERR_IO;
-    switch(status)
-    {
-        case FLASH_ERR_BAD_BLOCK:
-            err = LFS_ERR_CORRUPT;
-            break;
-        case FLASH_ERR_CACHE_OVERWRITE:
-            err = LFS_ERR_FBIG;
-            break;
-        case FLASH_ERR_TIMEOUT:
-        default:
-            break;
+// Good blocks are marked with a 1 - (which means we do not need to erase before
+// writing to the bbt, we will only ever write-down)
+uint32_t translate_address(uint32_t input_address) {
+    // Calc initial predicted block
+    uint32_t target_block = input_address >> BBT_LOG2;
+    uint32_t unset_bits = 0;
+    uint32_t index;
+    for (index = 0; index < (target_block / sizeof(bbt_t)) + unset_bits - 1;
+         ++index) {
+        // Calc bitmask, will be 0xFFFFFFFF until we reach the final block
+        unset_bits += (8 * sizeof(bbt_t)) - pop_count(bad_block_table[index]);
     }
-    return err;
-}
-
-static int lfs_flash_read(const struct lfs_config *c, lfs_block_t block,
-            lfs_off_t off, void *buffer, lfs_size_t size)
-{
-    callback_t future = future_get();
-    if (NULL != future)
-    {
-        uint16_t page = PAGE_OFFSET(off);
-        flash_read(PAGE_ADDRESS(block, page), off % PAGE_SIZE, buffer, size, future);
-        int32_t status = future_await(future, MILLIS(FILESYSTEM_TIMEOUT_MS));
-        if (FLASH_SUCCESS != status)
-        {
-            return get_lfs_err(status);
+    // Check last word
+    uint32_t additional_offset = 0;
+    while (!(bad_block_table[index + 1] & (0x01 << additional_offset))) {
+        additional_offset += 1;
+        if (additional_offset > sizeof(bbt_t)) {
+            index += 1;
+            if (index >= BLOCK_COUNT) {
+                // Critical error, we cannot find additional non-bad space
+                return INVALID_ADDRESS;
+            }
         }
     }
-    return 0;
+    unset_bits += additional_offset;
+    uint32_t translated_address = (unset_bits * BLOCK_SIZE) + input_address;
+    return (unset_bits * BLOCK_SIZE) + input_address;
 }
 
-static int lfs_flash_prog(const struct lfs_config *c, lfs_block_t block,
-        lfs_off_t off, const void *buffer, lfs_size_t size)
-{
-    callback_t future = future_get();
-    if (NULL != future)
-    {
-        uint16_t page = PAGE_OFFSET(off);
-        flash_write(PAGE_ADDRESS(block, page), off % PAGE_SIZE, buffer, size, future);
-        int32_t status = future_await(future, MILLIS(FILESYSTEM_TIMEOUT_MS));
-        if (FLASH_SUCCESS != status)
-        {
-            return get_lfs_err(status);
+static void rebuild_bbt(void) {
+    callback_t future;
+    uint32_t status;
+    uint8_t mark_buf;
+    for (uint32_t block = 0; block < BLOCK_COUNT; ++block) {
+        // Check first page
+        future = future_get();
+        flash_read(PAGE_ADDRESS(block, 0), OOB_BASE_ADDRESS, &mark_buf, 1,
+                   future);
+        status = future_await(future, MILLIS(FILESYSTEM_TIMEOUT_MS));
+        if (ERASED_VALUE == mark_buf) {
+            // Check second page
+            future = future_get();
+            flash_read(PAGE_ADDRESS(block, 1), OOB_BASE_ADDRESS, &mark_buf, 1,
+                       future);
+            status = future_await(future, MILLIS(FILESYSTEM_TIMEOUT_MS));
+        }
+        // Check if either read produced a bad block value
+        if (ERASED_VALUE != mark_buf) {
+            // Write-down the specified bit
+            bad_block_table[block >> BBT_LOG2] &= ~(0x01 << (block & BBT_MASK));
         }
     }
-    return 0;
 }
 
-static int lfs_flash_erase(const struct lfs_config *c, lfs_block_t block)
-{
-    callback_t future = future_get();
-    if (NULL != future)
-    {
-        flash_erase(PAGE_ADDRESS(block, 0), future);
-        int32_t status = future_await(future, MILLIS(FILESYSTEM_TIMEOUT_MS));
-        if (FLASH_SUCCESS != status)
-        {
-            return get_lfs_err(status);
+// Copy BBT from flash
+void bbt_init(void) {
+    callback_t future;
+    uint32_t status;
+    bbt_t buf = 0;
+    for (uint16_t block = 0; block < BLOCK_COUNT; ++block) {
+        future = future_get();
+        flash_read(PAGE_ADDRESS(block, 0), 0, &buf, sizeof(bbt_t), future);
+        status = future_await(future, MILLIS(FILESYSTEM_TIMEOUT_MS));
+        if (0xFFFFFFFF == buf) {
+            // Flash is uninitialized - run scan to (re)build table
+            // Initialize to all good
+            for (uint8_t i = 0; i < BBT_WORDS; ++i) {
+                bad_block_table[i] = 0xFFFFFFFF;
+            }
+            rebuild_bbt();
+            return;
+        } else if (BBT_MAGIC == buf) {
+            // We have found our pattern, read in the bbt
+            future = future_get();
+            flash_read(PAGE_ADDRESS(0, 0), sizeof(bbt_t), &bad_block_table,
+                       sizeof(bad_block_table), future);
+            status = future_await(future, MILLIS(FILESYSTEM_TIMEOUT_MS));
+            return;
+        } else if (0 == buf) {
+            // Flash has been written down, keep looking
+            continue;
+        } else {
+            // Corrupted flash? TODO: Handle error
         }
     }
-    return 0;
 }
 
-static int lfs_flash_sync(const struct lfs_config *c) {
-    callback_t future = future_get();
-    if (NULL != future)
+void bbt_mark_bad(uint32_t input_address) {
+    uint32_t status;
+    callback_t future;
+    bbt_t write_buffer = 0;
+    // Update the RAM table
+    uint32_t block = (translate_address(input_address) >> BBT_LOG2);
+    // Write down BBT space on marked bad block
+    // Okay, we shouldn't be writing here, but we're gonna anyway
+    future = future_get();
+    flash_write(block, 0, &write_buffer, sizeof(bbt_t), future);
+    status = future_await(future, MILLIS(FILESYSTEM_TIMEOUT_MS));
+    if (status) {
+        dbgprintf("FS:%d", status);
+    }
+    // Reset the bit corresponding to the block
+    bad_block_table[block >> BBT_LOG2] &= ~(0x01 << (block & BBT_MASK));
+    future = future_get();
+    uint32_t bbt_address = translate_address(BBT_BASE_ADDRESS);
+    write_buffer = BBT_MAGIC;
+    future = future_get();
+    flash_update(bbt_address, 0, &write_buffer, sizeof(bbt_t), future);
+    status = future_await(future, MILLIS(FILESYSTEM_TIMEOUT_MS));
+    if (status) {
+        dbgprintf("FS:%d", status);
+    }
+    future = future_get();
+    flash_update(bbt_address, sizeof(bbt_t), bad_block_table,
+                 sizeof(bad_block_table), future);
+    status = future_await(future, MILLIS(FILESYSTEM_TIMEOUT_MS));
+    if (status) {
+        dbgprintf("FS:%d", status);
+    }
+    // We need to commit the BBT when updated
+    future = future_get();
+    flash_commit(future);
+    status = future_await(future, MILLIS(FILESYSTEM_TIMEOUT_MS));
+    if (status) {
+        dbgprintf("FS:%d", status);
+    }
+}
+
+void filesystem_init(void) { bbt_init(); }
+
+void file_open(const char* path) {
+    if (strcmp(path, WORDS_DB) == 0) {
+        current_offset = WORD_DB_BASE_ADDRESS;
+    } else if (strcmp(path, AUDIO_DB) == 0) {
+        current_offset = AUDIO_DB_BASE_ADDRESS;
+    } else {
+        current_offset = MINIMUM_OFFSET;
+    }
+}
+
+size_t file_read(buffer_t dest, size_t size) {
+    if (current_offset >= MINIMUM_OFFSET) {
+        callback_t future = future_get();
+        flash_read(current_offset >> 16, current_offset & 0xFFFF, dest, size,
+                   future);
+        future_await(future, MILLIS(FILESYSTEM_TIMEOUT_MS));
+    }
+}
+
+void file_seek(int seekv) {
+    uint32_t new_offset = seekv + current_offset;
+    if (current_offset >= MINIMUM_OFFSET &&
+        current_offset < AUDIO_DB_BASE_ADDRESS) {
+        if ((new_offset < AUDIO_DB_BASE_ADDRESS) &&
+            (new_offset >= MINIMUM_OFFSET)) {
+            current_offset = new_offset;
+        }
+    } else  // (current_offset >= AUDIO_DB_BASE_ADDRESS)
     {
-        flash_commit(future);
-        int32_t status = future_await(future, MILLIS(FILESYSTEM_TIMEOUT_MS));
-        if (FLASH_SUCCESS != status)
-        {
-            return get_lfs_err(status);
+        if ((new_offset >= AUDIO_DB_BASE_ADDRESS)) {
+            current_offset = new_offset;
         }
     }
-    return 0;
 }
 
-void filesystem_init()
-{
-    int status = lfs_mount(&lfs, &lfs_cfg);
-    if (status)
-    {
-        lfs_format(&lfs, &lfs_cfg);
-        lfs_mount(&lfs, &lfs_cfg);
-    }
-}
-
-void file_open(const char* path)
-{
-    lfs_file_opencfg(&lfs, &file, path, LFS_O_RDONLY, &lfs_cfg);
-}
-
-size_t file_read(buffer_t dest, size_t size)
-{
-    return lfs_file_read(&lfs, &file, dest, size);
-}
-
-void file_seek(int seekv)
-{
-    lfs_file_rewind(&lfs, &file);
-    lfs_file_seek(&lfs, &file, seekv, LFS_SEEK_SET);
-}
-
-void file_close()
-{
-    lfs_file_close(&lfs, &file);
-}
+void file_close() { current_offset = MINIMUM_OFFSET; }
