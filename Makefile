@@ -154,21 +154,17 @@ CFLAGS += -MMD -MP -MF"$(@:%.o=%.d)" -std=c11
 LDSCRIPT = STM32G030C8Tx_FLASH.ld
 
 # libraries
-LIBS = -lc -lm -lnosys -llfs
+LIBS = -lc -lm -lnosys
 LIBDIR = -L$(BUILD_DIR)
 LDFLAGS = $(MCU) -specs=nano.specs -T$(LDSCRIPT) $(LIBDIR) $(LIBS) -Wl,-Map=$(BUILD_DIR)/$(TARGET).map,--cref -Wl,--gc-sections
 
-.PHONY: lfs
+.PHONY: all test
 
 # default action: build all
-all: $(BUILD_DIR)/$(TARGET).elf $(BUILD_DIR)/$(TARGET).hex $(BUILD_DIR)/$(TARGET).bin $(BUILD_DIR)/liblfs.a
+all: $(BUILD_DIR)/$(TARGET).elf $(BUILD_DIR)/$(TARGET).hex $(BUILD_DIR)/$(TARGET).bin
 
 test:
 	make -C test
-
-$(BUILD_DIR)/liblfs.a:
-	make -C thirdparty/littlefs BUILDDIR=../../$(BUILD_DIR) \
-	CC=$(CC) AR=$(AR) SIZE=$(SIZE) CTAGS=$(CTAGS) NM=$(NM) OBJDUMP=$(OBJDUMP) VALGRIND=$(VALGRIND) GDB=$(GDB) PERF=$(PERF)
 
 #######################################
 # build the application

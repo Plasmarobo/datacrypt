@@ -33,6 +33,7 @@ typedef struct {
 } task_data_t;
 // Task handles should be used carefully, non-periodic tasks may be receclyed
 typedef task_data_t* task_handle_t;
+typedef callback_t future_t;
 
 // Schedules a task for execution on the next exec cycle
 task_handle_t task_immediate(callback_t task);

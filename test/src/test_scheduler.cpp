@@ -4,9 +4,9 @@
 #include "scheduler.h"
 
 static timespan_t _us = 0;
+void tick(timespan_t us) { _us += us; }
 timespan_t microseconds() { return _us; }
 timespan_t milliseconds() { return _us / 1000; }
-void tick(timespan_t us) { _us += us; }
 void enter_critical(){}
 void exit_critical(){}
 
@@ -331,12 +331,6 @@ TEST_CASE("Scheduler abort from task", "[scheduler]")
 
 static callback_t future_cb;
 
-static void nonblocking_op(callback_t on_complete)
-{
-    future_cb = on_complete;
-    task_delayed_unique_signal(resolve_blocking, 10, 3);
-}
-
 static void resolve_blocking(int32_t status)
 {
     if (NULL != future_cb)
@@ -346,16 +340,32 @@ static void resolve_blocking(int32_t status)
     }
 }
 
+static void nonblocking_op(callback_t on_complete)
+{
+    future_cb = on_complete;
+    task_delayed_unique_signal(resolve_blocking, 10, 3);
+}
+
+static void tick_op(int32_t status)
+{
+    // Force the counter to advance
+    tick(1);
+}
+
 TEST_CASE("Scheduler future await execution", "[futures]")
 {
     int32_t status = 0;
     scheduler_init();
+    // Kickstart the timer
+    scheduler_exec();
+    tick(1);
+    task_periodic(tick_op, 1);
     // Acquire a future
     callback_t future = future_get();
     // Simulate nonblocking op
     nonblocking_op(future);
     // Await op
-    status = future_await(future);
+    status = future_await(future, 15);
     REQUIRE(status == 3);
 }
 

@@ -63,6 +63,7 @@ task_handle_t task_periodic_signal(callback_t handler, timespan_t period,
 task_handle_t task_delayed(callback_t handler, timespan_t delay) {
     return task_delayed_signal(handler, delay, 0);
 }
+
 task_handle_t task_delayed_signal(callback_t handler, timespan_t delay,
                                   int32_t status) {
     enter_critical();
@@ -83,6 +84,7 @@ task_handle_t task_delayed_signal(callback_t handler, timespan_t delay,
 task_handle_t task_delayed_unique(callback_t handler, timespan_t delay) {
     return task_delayed_unique_signal(handler, delay, 0);
 }
+
 task_handle_t task_delayed_unique_signal(callback_t handler, timespan_t delay,
                                          int32_t status) {
     enter_critical();
