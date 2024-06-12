@@ -43,6 +43,9 @@ uint32_t random_int() {
 #define REJECTION_RANGE(r) ((uint32_t)((RANDOM_MAX + 1) / r))
 
 uint32_t uniform(uint32_t min, uint32_t max) {
+    if (max <= min) {
+        return 0;
+    }
     uint32_t delta = max - min;
     uint32_t value;
     do {

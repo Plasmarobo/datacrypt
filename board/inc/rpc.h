@@ -15,6 +15,8 @@
 #define RPC_ERASE_FLASH ('e')
 // print u8size ascii_data...
 #define RPC_ECHO ('p')
+// dump software info
+#define RPC_INFO ('i')
 
 #define RPC_STATUS_OK (0)
 #define RPC_STATUS_BUSY (1)
@@ -27,7 +29,7 @@ typedef enum {
     RPC_EXEC,
 } rpc_state_t;
 
-typedef struct {
+typedef struct __attribute__((packed)) {
     char code;
     uint32_t address;
     uint8_t length;

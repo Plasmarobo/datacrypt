@@ -2,3 +2,9 @@ build
 *.d
 *.o
 .vscode
+
+tools/rpc/debug
+tools/rpc/target
+tools/rpc/Cargo.lock
+**/*.rs.bak
+**/*.pdb

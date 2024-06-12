@@ -1,3 +1,5 @@
+#include <stdint.h>
+
 #include "bsp.h"
 #include "flash.h"
 #include "fsm.h"
@@ -99,7 +101,6 @@ static void flash_write_cache(uint16_t byte_address, buffer_t source,
 static void query_jedec(int32_t status);
 static void flash_stream_data(int32_t status);
 static void flash_flush_cache(int32_t status);
-static void write_bbt(int32_t status);
 static void read_status(int32_t status);
 static void op_handler_pop(int32_t status);
 
@@ -123,7 +124,7 @@ static void populate_cache(int32_t status) {
 
 // Fetch data from chip
 static void read_bytes(int32_t status) {
-    read(&current_transaction.data, current_transaction.size, op_handler_pop);
+    read(current_transaction.data, current_transaction.size, op_handler_pop);
 }
 
 // Read cache into memory buffer
@@ -213,7 +214,7 @@ static void check_bbt_value(int32_t status) {
         if (!(block_page_address & PAGE_MASK)) {
             // Check page 2
             block_page_address += 1;
-            byte_address - OOB_BASE_ADDRESS;
+            byte_address = OOB_BASE_ADDRESS;
             general_buffer = ERASED_VALUE;
             stack_push(&op_stack, &check_bbt_value);
             populate_cache(FLASH_SUCCESS);
@@ -233,14 +234,18 @@ static void check_bad_block(int32_t status) {
     populate_cache(FLASH_SUCCESS);
 }
 
-static void flash_reset(int32_t status) {
-    // Wait for TRST then transition to startup scan
-    flash_busy = true;
+static void bad_block_scan_start(int32_t status) {
     block_page_address = PAGE_ADDRESS(0, 0);
     // Factory bad block markers are in the first byte of spare
     byte_address = PAGE_SIZE;
     current_transaction.data = &general_buffer;
     current_transaction.size = 1;
+    check_bad_block(FLASH_SUCCESS);
+}
+
+static void flash_reset(int32_t status) {
+    // Wait for TRST then transition to startup scan
+    flash_busy = true;
     stack_push(&op_stack, &bad_block_scan_start);
     task_delayed(query_jedec, MICROS(TRST_US));
 };
@@ -328,11 +333,13 @@ static void query_jedec(int32_t status) {
 static bool write(buffer_t buffer, length_t len, callback_t oncomplete) {
     operation_callback = oncomplete;
     HAL_SPI_Transmit_DMA(&hspi2, buffer, len);
+    return true;
 }
 
 static bool read(buffer_t buffer, length_t len, callback_t oncomplete) {
     operation_callback = oncomplete;
     HAL_SPI_Receive_DMA(&hspi2, buffer, len);
+    return true;
 }
 
 static void timeout_handler(int32_t status) {
@@ -345,7 +352,7 @@ static void timeout_handler(int32_t status) {
 
 static void read_status(int32_t status) {
     byte_address = STATUS_REGISTER;
-    get_feature(check_status);
+    get_feature(&check_status);
 }
 
 static void config_polling_op(timespan_t interval, timespan_t timeout) {

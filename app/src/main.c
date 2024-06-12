@@ -4,16 +4,17 @@
 #include "adc.h"
 #include "bsp.h"
 #include "game.h"
+#include "rpc.h"
 #include "scheduler.h"
 
 int main() {
     bsp_init();
     scheduler_init();
     adc_init(NULL);
-    // random_init();
+    random_init();
     leds_init();
     display_init(game_init);
-    // flash_init(NULL);
+    flash_init(NULL);
     serial_write("\r\nBOOT\r\n", 8, NULL);
     rpc_init();
     scheduler_freerun();

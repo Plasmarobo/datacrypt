@@ -17,25 +17,31 @@ static void rpc_finish(int32_t status) {
 static int32_t rpc_do_command() {
     rpc_state = RPC_EXEC;
     switch (rpc_buffer.code) {
-        case 'r':
+        case RPC_READ_FLASH:
             flash_read(rpc_buffer.address >> 16, rpc_buffer.address & 0xFFFF,
                        data_buffer, rpc_buffer.length, rpc_finish);
             break;
-        case 'w':
+        case RPC_WRITE_FLASH:
             /*flash_update(rpc.address >> 16, rpc.address & 0xFFFF, data_buffer,
                          rpc_buffer.length, rpc_finish);*/
             rpc_finish(RPC_STATUS_ERR_EXEC);
             break;
-        case 'c':
-            flash_commit(rpc_finish);
+        case RPC_COMMIT_FLASH:
+            /*flash_commit(rpc_finish);*/
+            rpc_finish(RPC_STATUS_ERR_EXEC);
             break;
-        case 'e':
+        case RPC_ERASE_FLASH:
             /*flash_erase(rpc.address, rpc_finish);*/
             rpc_finish(RPC_STATUS_ERR_EXEC);
             break;
-        case 'p':
+        case RPC_ECHO:
             display_clear();
             display_set_text(8, 8, data_buffer, rpc_buffer.length);
+            display_show((uint8_t)rpc_buffer.address, rpc_finish);
+            break;
+        case RPC_INFO:
+            display_clear();
+            display_set_text(8, 8, VERSION_STRING, strlen(VERSION_STRING));
             display_show((uint8_t)rpc_buffer.address, rpc_finish);
             break;
         default:

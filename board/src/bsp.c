@@ -785,7 +785,7 @@ static void gpio_event(gpio_t gpio) {
 
 static callback_t serial_rxcomplete = NULL;
 static callback_t serial_txcomplete = NULL;
-static bool serial_lock = false;
+static volatile bool serial_lock = false;
 
 void serial_read(buffer_t dest, length_t length, callback_t oncomplete) {
     serial_rxcomplete = oncomplete;

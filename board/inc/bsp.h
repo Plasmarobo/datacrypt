@@ -65,6 +65,8 @@ void Error_Handler(void);
 
 /* Private defines -----------------------------------------------------------*/
 
+#define VERSION_STRING ("v0.0.1 alpha")
+
 typedef struct {
     uint16_t pin;
     GPIO_TypeDef *port;
