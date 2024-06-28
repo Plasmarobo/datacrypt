@@ -28,7 +28,7 @@ typedef uint32_t wave_t;
 #define CODEPOINT_PITCH (BYTES_PER_BYTE * 3)
 #define CODEPOINT_LENGTH (RST_BYTES + (BYTES_PER_BYTE * 3 * LED_COUNT))
 // Brightness from 0 to 255
-static uint16_t brightness = 192;
+static uint16_t brightness = 64;
 static bool _leds_busy = false;
 
 /*
@@ -63,18 +63,18 @@ static inline void swapptr(uint8_t** a, uint8_t** b) {
 
 static inline void hsv_pointer_swap(uint8_t sextant, uint8_t** r, uint8_t** g,
                                     uint8_t** b) {
-    if ((sextant)&2) {
+    if ((sextant) & 2) {
         swapptr((r), (b));
     }
-    if ((sextant)&4) {
+    if ((sextant) & 4) {
         swapptr((g), (b));
     }
-    if (!((sextant)&6)) {
-        if (!((sextant)&1)) {
+    if (!((sextant) & 6)) {
+        if (!((sextant) & 1)) {
             swapptr((r), (g));
         }
     } else {
-        if ((sextant)&1) {
+        if ((sextant) & 1) {
             swapptr((r), (g));
         }
     }
@@ -138,7 +138,7 @@ static inline void write_codepoint(uint32_t* offset, wave_t wave) {
     // MSB first configuration
     codepoints[(*offset)++] = (wave >> 16) & 0xFF;
     codepoints[(*offset)++] = (wave >> 8) & 0xFF;
-    codepoints[(*offset)++] = (wave)&0xFF;
+    codepoints[(*offset)++] = (wave) & 0xFF;
 }
 
 void set_rgb(uint32_t address, uint8_t r, uint8_t g, uint8_t b) {

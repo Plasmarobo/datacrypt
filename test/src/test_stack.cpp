@@ -74,3 +74,38 @@ TEST_CASE("Pointer stack", "[stack]") {
     REQUIRE(*tb == 3);
     REQUIRE(*ta == 1);
 }
+
+static void inc_value(int& value, int amount) { value += amount; }
+typedef void (*testfn_t)(int&, int);
+
+TEST_CASE("Function pointer stack", "[stack]") {
+    int a = 0;
+    STACK(ts, testfn_t, 3);
+    testfn_t store_func_1 = inc_value;
+    testfn_t store_func_2 = NULL;
+    testfn_t store_func_3 = inc_value;
+
+    REQUIRE(store_func_1 == inc_value);
+    REQUIRE(store_func_2 == NULL);
+    REQUIRE(store_func_3 == inc_value);
+    stack_push(&ts, &store_func_1);
+    stack_push(&ts, &store_func_2);
+    stack_push(&ts, &store_func_3);
+
+    testfn_t user_func_1;
+    testfn_t user_func_2;
+    testfn_t user_func_3;
+
+    stack_pop(&ts, &user_func_1);
+    stack_pop(&ts, &user_func_2);
+    stack_pop(&ts, &user_func_3);
+
+    REQUIRE(user_func_1 == store_func_1);
+    REQUIRE(user_func_2 == NULL);
+    REQUIRE(user_func_3 == store_func_3);
+    REQUIRE(a == 0);
+    (*user_func_1)(a, 1);
+    REQUIRE(a == 1);
+    user_func_3(a, 2);
+    REQUIRE(a == 3);
+}

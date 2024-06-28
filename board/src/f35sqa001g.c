@@ -104,6 +104,8 @@ static void flash_flush_cache(int32_t status);
 static void read_status(int32_t status);
 static void op_handler_pop(int32_t status);
 
+static void push_op(callback_t op) { stack_push(&op_stack, &op); }
+
 // Enables re-using cache where possible
 static void mark_cache_clean(int32_t status) {
     if (FLASH_SUCCESS == status) {
@@ -167,9 +169,11 @@ static void set_feature(int32_t status) {
 // Proceed to next op in stack
 static void op_handler_pop(int32_t status) {
     callback_t handler = NULL;
-    stack_pop(&op_stack, &handler);
-    if (NULL != handler) {
-        handler(status);
+    if (!stack_empty(&op_stack)) {
+        stack_pop(&op_stack, &handler);
+        if (NULL != handler) {
+            handler(status);
+        }
     }
 }
 
@@ -196,9 +200,9 @@ static void mark_bbt_page_1(int32_t status) {
 
 static void mark_bad_block(int32_t status) {
     general_buffer = BAD_BLOCK_VALUE;
-    stack_push(&op_stack, &flash_flush_cache);
-    stack_push(&op_stack, &mark_bbt_page_1);
-    stack_push(&op_stack, &flash_flush_cache);
+    push_op(flash_flush_cache);
+    push_op(mark_bbt_page_1);
+    push_op(flash_flush_cache);
     bytes_written = 0;
     cache_dirty = false;
     byte_address = OOB_BASE_ADDRESS;
@@ -216,7 +220,7 @@ static void check_bbt_value(int32_t status) {
             block_page_address += 1;
             byte_address = OOB_BASE_ADDRESS;
             general_buffer = ERASED_VALUE;
-            stack_push(&op_stack, &check_bbt_value);
+            push_op(check_bbt_value);
             populate_cache(FLASH_SUCCESS);
         } else {
             op_handler_pop(status);
@@ -230,7 +234,7 @@ static void check_bad_block(int32_t status) {
     block_page_address = block_page_address & BLOCK_MASK;
     byte_address = OOB_BASE_ADDRESS;  // First byte in OOB
     general_buffer = ERASED_VALUE;
-    stack_push(&op_stack, &check_bbt_value);
+    push_op(check_bbt_value);
     populate_cache(FLASH_SUCCESS);
 }
 
@@ -243,11 +247,16 @@ static void bad_block_scan_start(int32_t status) {
     check_bad_block(FLASH_SUCCESS);
 }
 
+static void flash_post_reset(int32_t status) {
+    push_op(bad_block_scan_start);
+    task_delayed(query_jedec, MICROS(TRST_US));
+};
+
 static void flash_reset(int32_t status) {
     // Wait for TRST then transition to startup scan
     flash_busy = true;
-    stack_push(&op_stack, &bad_block_scan_start);
-    task_delayed(query_jedec, MICROS(TRST_US));
+    command_buffer[0] = 0xFF;
+    write(command_buffer, 1, flash_post_reset);
 };
 
 // Warning: this conducts the actual block erase, check bbt first
@@ -267,8 +276,8 @@ static void block_erase(int32_t status) {
 
 static void flash_erase_block(flash_page_address_t address) {
     block_page_address = address & BLOCK_MASK;
-    stack_push(&op_stack, &block_erase);
-    stack_push(&op_stack, &check_bad_block);
+    push_op(block_erase);
+    push_op(check_bad_block);
     op_handler_pop(FLASH_SUCCESS);
 };
 
@@ -352,7 +361,8 @@ static void timeout_handler(int32_t status) {
 
 static void read_status(int32_t status) {
     byte_address = STATUS_REGISTER;
-    get_feature(&check_status);
+    push_op(check_status);
+    get_feature(FLASH_SUCCESS);
 }
 
 static void config_polling_op(timespan_t interval, timespan_t timeout) {
@@ -397,8 +407,8 @@ static bool lock_flash(callback_t notify) {
         }
         return false;
     }
-    stack_push(&op_stack, &notify);
-    stack_push(&op_stack, &unlock_flash);
+    push_op(notify);
+    push_op(unlock_flash);
     return true;
 }
 
@@ -409,7 +419,7 @@ void flash_read(flash_page_address_t bp_addr, uint16_t byte_address_,
         current_transaction.size = size;
         if ((cache_dirty) || (bp_addr != block_page_address)) {
             // Need to fetch the page from memory
-            stack_push(&op_stack, &read_cache);
+            push_op(read_cache);
             populate_cache(FLASH_SUCCESS);
         } else {
             // Our page is already in memory, we can optimize the read
@@ -443,7 +453,7 @@ void flash_update(flash_page_address_t page, uint16_t byte_address_,
             write_cache(FLASH_SUCCESS);
         } else {
             block_page_address = page;
-            stack_push(&op_stack, &write_cache);
+            push_op(write_cache);
             populate_cache(FLASH_SUCCESS);
         }
     }
