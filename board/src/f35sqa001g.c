@@ -48,6 +48,7 @@
 #define TERASE_MS (10)
 #define MAX_CMD_BYTES (8)
 #define JEDEC_BYTES (3)
+#define MAX_TRANSACTION_BYTES (128 + 8)
 
 #define PROTECTION_REGISTER (0xA0)
 #define CONFIG_REGISTER (0xB0)
@@ -68,8 +69,7 @@ typedef struct {
 } flash_transaction_t;
 
 static timespan_t poll_interval;
-//
-static uint8_t command_buffer[MAX_CMD_BYTES];
+static volatile uint8_t tx_rx_buffer[MAX_TRANSACTION_BYTES];
 static uint8_t jedec_id[JEDEC_BYTES];
 
 static flash_page_address_t block_page_address;
@@ -89,8 +89,16 @@ static uint16_t bytes_written;
 
 STACK(op_stack, callback_t, 8);
 
-static bool write(buffer_t buffer, length_t len, callback_t oncomplete);
-static bool read(buffer_t buffer, length_t len, callback_t oncomplete);
+static void spi_start();
+static void spi_finish();
+
+static void spi_write_read(buffer_t transmit, length_t tx_len, buffer_t receive,
+                           length_t rx_len, callback_t oncomplete);
+static void spi_write(buffer_t buffer, length_t length);
+static void spi_read(buffer_t buffer, length_t length);
+
+// static bool write(buffer_t buffer, length_t len, callback_t oncomplete);
+// static bool read(buffer_t buffer, length_t len, callback_t oncomplete);
 static void config_polling_op(timespan_t interval, timespan_t timeout);
 static void status_poll(int32_t status);
 static void check_status(int32_t status);
@@ -114,56 +122,86 @@ static void mark_cache_clean(int32_t status) {
     op_handler_pop(status);
 }
 
+// Sets CS
+static void spi_start() { gpio_set(FLASH_CS, false); }
+
+// Releases CS
+static void spi_finish() { gpio_set(FLASH_CS, true); }
+
+static bool spi_write_read(buffer_t transmit, length_t tx_len, buffer_t receive,
+                           length_t rx_len, callback_t oncomplete) {
+    operation_callback = oncomplete;
+    gpio_set(FLASH_CS, false);
+    HAL_SPI_TransmitReceive_DMA(&hspi2, transmit, receive, tx_len + rx_len);
+    return true;
+}
+
+static bool spi_write(buffer_t buffer, length_t len, callback_t oncomplete) {
+    operation_callback = oncomplete;
+    gpio_set(FLASH_CS, false);
+    HAL_SPI_Transmit_DMA(&hspi2, buffer, len);
+    return true;
+}
+
+static bool spi_read(buffer_t buffer, length_t len, callback_t oncomplete) {
+    operation_callback = oncomplete;
+    gpio_set(FLASH_CS, false);
+    HAL_SPI_Receive_DMA(&hspi2, buffer, len);
+    return true;
+}
+
+static void set_write_enable_latch(int32_t status) {
+    tx_rx_buffer[0] = WRITE_ENABLE;
+    spi_write(tx_rx_buffer, 1, op_handler_pop);
+}
+
 // Load a page into the chip cache
 static void populate_cache(int32_t status) {
-    command_buffer[0] = PAGE_READ_TO_CACHE;
-    command_buffer[1] = TIMING_BYTE;
-    command_buffer[2] = (block_page_address >> 8) & 0xFF;
-    command_buffer[3] = block_page_address & 0xFF;
+    tx_rx_buffer[0] = PAGE_READ_TO_CACHE;
+    tx_rx_buffer[1] = TIMING_BYTE;
+    tx_rx_buffer[2] = (block_page_address >> 8) & 0xFF;
+    tx_rx_buffer[3] = block_page_address & 0xFF;
     config_polling_op(MICROS(TRD_US), FLASH_TIMEOUT_MS);
-    write(command_buffer, 4, mark_cache_clean);
+    spi_start();
+    spi_write(tx_rx_buffer, 4, mark_cache_clean);
 }
 
 // Fetch data from chip
 static void read_bytes(int32_t status) {
-    read(current_transaction.data, current_transaction.size, op_handler_pop);
+    spi_read(current_transaction.data, current_transaction.size,
+             op_handler_pop);
 }
 
 // Read cache into memory buffer
 static void read_cache(int32_t status) {
-    command_buffer[0] = READ_FROM_CACHE;
-    command_buffer[1] = (byte_address >> 8) & 0xFF;
-    command_buffer[2] = byte_address & 0xFF;
-    command_buffer[3] = TIMING_BYTE;
-    write(command_buffer, 4, read_bytes);
+    tx_rx_buffer[0] = READ_FROM_CACHE;
+    tx_rx_buffer[1] = (byte_address >> 8) & 0xFF;
+    tx_rx_buffer[2] = byte_address & 0xFF;
+    tx_rx_buffer[3] = TIMING_BYTE;
+    spi_write(tx_rx_buffer, 4, read_bytes);
 }
 
-// Write cache from memroy buffer
+// Write cache from memory buffer
 static void write_cache(int32_t status) {
-    command_buffer[0] = RANDOM_PROGRAM_DATA_LOAD;
-    command_buffer[1] = (byte_address >> 8) & 0xFF;
-    command_buffer[2] = byte_address & 0xFF;
-    write(command_buffer, 3, flash_stream_data);
+    tx_rx_buffer[0] = RANDOM_PROGRAM_DATA_LOAD;
+    tx_rx_buffer[1] = (byte_address >> 8) & 0xFF;
+    tx_rx_buffer[2] = byte_address & 0xFF;
+    spi_write(tx_rx_buffer, 3, flash_stream_data);
 }
 
-// Fetch selected register/feature from chip
-static void read_feature(int32_t status) {
-    read(&feature_value, 1, op_handler_pop);
-}
-
-// Select register/feature (then read it)
+// Read register/feature
 static void get_feature(int32_t status) {
-    command_buffer[0] = GET_FEATURE;
-    command_buffer[1] = byte_address & 0xFF;
-    write(command_buffer, 2, read_feature);
+    tx_rx_buffer[0] = GET_FEATURE;
+    tx_rx_buffer[1] = byte_address & 0xFF;
+    spi_write_read(tx_rx_buffer, 2, &feature_value, 1, op_handler_pop);
 }
 
 // Write register/feature to chip
 static void set_feature(int32_t status) {
-    command_buffer[0] = SET_FEATURE;
-    command_buffer[1] = byte_address & 0xFF;
-    command_buffer[2] = feature_value;
-    write(command_buffer, 3, op_handler_pop);
+    tx_rx_buffer[0] = SET_FEATURE;
+    tx_rx_buffer[1] = byte_address & 0xFF;
+    tx_rx_buffer[2] = feature_value;
+    spi_write(tx_rx_buffer, 3, op_handler_pop);
 }
 
 // Proceed to next op in stack
@@ -255,20 +293,20 @@ static void flash_post_reset(int32_t status) {
 static void flash_reset(int32_t status) {
     // Wait for TRST then transition to startup scan
     flash_busy = true;
-    command_buffer[0] = 0xFF;
-    write(command_buffer, 1, flash_post_reset);
+    tx_rx_buffer[0] = 0xFF;
+    write(tx_rx_buffer, 1, flash_post_reset);
 };
 
 // Warning: this conducts the actual block erase, check bbt first
 static void block_erase(int32_t status) {
     if (FLASH_SUCCESS == status) {
-        command_buffer[0] = BLOCK_ERASE;
-        command_buffer[1] = TIMING_BYTE;
-        command_buffer[2] = (block_page_address >> 8) & 0xFF;
-        command_buffer[3] = block_page_address & 0xFF;
+        tx_rx_buffer[0] = BLOCK_ERASE;
+        tx_rx_buffer[1] = TIMING_BYTE;
+        tx_rx_buffer[2] = (block_page_address >> 8) & 0xFF;
+        tx_rx_buffer[3] = block_page_address & 0xFF;
         cache_dirty = true;
         config_polling_op(MILLIS(TERASE_MS), FLASH_TIMEOUT_MS);
-        write(command_buffer, 4, status_poll);
+        write(tx_rx_buffer, 4, status_poll);
     } else {
         op_handler_pop(FLASH_ERR_BAD_STATE);
     }
@@ -294,15 +332,15 @@ static void flash_write_cache(uint16_t byte_address_, buffer_t source,
                               length_t length) {
     cache_dirty = true;
     if (0 == bytes_written) {
-        command_buffer[0] = PROGRAM_DATA_LOAD;
+        tx_rx_buffer[0] = PROGRAM_DATA_LOAD;
     } else {
-        command_buffer[0] = RANDOM_PROGRAM_DATA_LOAD;
+        tx_rx_buffer[0] = RANDOM_PROGRAM_DATA_LOAD;
     }
-    command_buffer[1] = (byte_address_ >> 8) & 0xFF;
-    command_buffer[2] = byte_address_ & 0xFF;
+    tx_rx_buffer[1] = (byte_address_ >> 8) & 0xFF;
+    tx_rx_buffer[2] = byte_address_ & 0xFF;
     current_transaction.data = source;
     current_transaction.size = length;
-    write(command_buffer, 3, flash_stream_data);
+    spi_write(tx_rx_buffer, 3, flash_stream_data);
 };
 
 static void flash_modify_cache(uint16_t byte_addres_, buffer_t source,
@@ -315,40 +353,39 @@ static void flash_modify_cache(uint16_t byte_addres_, buffer_t source,
 
 // Flushes write-cache to flash
 static void flash_program(int32_t status) {
-    command_buffer[0] = PROGRAM_EXECUTE;
-    command_buffer[1] = TIMING_BYTE;
-    command_buffer[2] = (block_page_address >> 8) & 0xFF;
-    command_buffer[3] = block_page_address & 0xFF;
+    tx_rx_buffer[0] = PROGRAM_EXECUTE;
+    tx_rx_buffer[1] = TIMING_BYTE;
+    tx_rx_buffer[2] = (block_page_address >> 8) & 0xFF;
+    tx_rx_buffer[3] = block_page_address & 0xFF;
     bytes_written = 0;
     cache_dirty = false;
     config_polling_op(MICROS(TPROG_US), FLASH_TIMEOUT_MS);
-    write(command_buffer, 4, status_poll);
+    write(tx_rx_buffer, 4, status_poll);
 };
 
 // Starts a flush op
 static void flash_flush_cache(int32_t status) {
-    command_buffer[0] = WRITE_ENABLE;
-    write(command_buffer, 1, flash_program);
+    tx_rx_buffer[0] = WRITE_ENABLE;
+    write(tx_rx_buffer, 1, flash_program);
 };
 
-static void read_jedec(int32_t status) { read(jedec_id, 3, op_handler_pop); };
-
-static void query_jedec(int32_t status) {
-    command_buffer[0] = JEDEC_READ;
-    command_buffer[1] = TIMING_BYTE;
-    write(command_buffer, 2, read_jedec);
-};
-
-static bool write(buffer_t buffer, length_t len, callback_t oncomplete) {
-    operation_callback = oncomplete;
-    HAL_SPI_Transmit_DMA(&hspi2, buffer, len);
-    return true;
+static void dump_jedec(int32_t status) {
+    serial_printf("RX:");
+    for (uint8_t i = 0; i < 3; ++i) {
+        serial_printf(" 0x%02x", jedec_id[i]);
+    }
+    serial_print("\r\n");
 }
 
-static bool read(buffer_t buffer, length_t len, callback_t oncomplete) {
-    operation_callback = oncomplete;
-    HAL_SPI_Receive_DMA(&hspi2, buffer, len);
-    return true;
+static void read_jedec(int32_t status) { read(jedec_id, 3, dump_jedec); };
+
+static void query_jedec(int32_t status) {
+    tx_rx_buffer[0] = JEDEC_READ;
+    tx_rx_buffer[1] = TIMING_BYTE;
+    tx_rx_buffer[2] = 0x00;
+    tx_rx_buffer[3] = 0x00;
+    tx_rx_buffer[4] = 0x00;
+    write(tx_rx_buffer, 2, read_jedec);
 }
 
 static void timeout_handler(int32_t status) {
@@ -473,16 +510,12 @@ void flash_erase(uint32_t addr, callback_t on_complete) {
 
 void flash_init(callback_t on_init) {
     user_callback = on_init;
+    spi_finish();  // Resets the CS line
     flash_reset(FLASH_SUCCESS);
 }
 
-void flash_tx_complete_handler(int32_t status) {
-    if (NULL != operation_callback) {
-        operation_callback(status);
-    }
-}
-
-void flash_rx_complete_handler(int32_t status) {
+void flash_op_complete_handler(int32_t status) {
+    spi_finish();
     if (NULL != operation_callback) {
         operation_callback(status);
     }

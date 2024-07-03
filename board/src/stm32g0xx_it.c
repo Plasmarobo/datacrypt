@@ -371,7 +371,7 @@ void HAL_SPI_TxCpltCallback(SPI_HandleTypeDef* spi) {
 
     if (SPI2 == spi->Instance) {
         // Unlock flash chip perihperal, pump statemachine
-        task_immediate(flash_tx_complete_handler);
+        task_immediate(flash_op_complete_handler);
     }
 }
 
@@ -385,7 +385,13 @@ void HAL_SPI_RxCpltCallback(SPI_HandleTypeDef* spi) {
 
     if (SPI2 == spi->Instance) {
         // Flash chip has sent us data
-        task_immediate(flash_rx_complete_handler);
+        task_immediate(flash_op_complete_handler);
+    }
+}
+
+HAL_SPI_TxRxCpltCallback(SPI_HandleTypeDef* spi) {
+    if (SPI2 == spi->Instance) {
+        task_immediate(flash_op_complete_handler);
     }
 }
 

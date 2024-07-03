@@ -213,8 +213,7 @@ void flash_commit(callback_t on_complete);
 void flash_update(flash_page_address_t page, uint16_t byte_address_,
                   buffer_t data, length_t size, callback_t on_complete);
 void flash_erase(uint32_t addr, callback_t on_complete);
-void flash_tx_complete_handler(int32_t status);
-void flash_rx_complete_handler(int32_t status);
+void flash_op_complete_handler(int32_t status);
 
 // ========== Serial Comm ==========
 void serial_read(buffer_t dest, length_t length, callback_t oncomplete);

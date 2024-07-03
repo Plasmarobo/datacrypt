@@ -9,7 +9,7 @@ static uint8_t data_buffer[RPC_MAX_LENGTH];
 static void rpc_exec(int32_t status);
 
 static void rpc_finish(int32_t status) {
-    serial_printf("RPC: %d\n", status);
+    serial_printf("RPC: %d\r\n", status);
     rpc_state = RPC_READ_COMMAND;
     serial_read((buffer_t)&rpc_buffer, sizeof(rpc_t), rpc_exec);
 }
@@ -71,7 +71,7 @@ static void rpc_exec(int32_t status) {
             break;
         case RPC_EXEC:
             status = RPC_STATUS_BUSY;
-            serial_printf("RPC: %d\n", status);
+            serial_printf("RPC: %d\r\n", status);
             break;
         default:
             rpc_finish(RPC_STATUS_ERR_ARG);
@@ -81,6 +81,6 @@ static void rpc_exec(int32_t status) {
 
 void rpc_init(void) {
     rpc_state = RPC_READ_COMMAND;
-    serial_print("RPC Ready\n");
+    serial_print("RPC Ready\r\n");
     serial_read((buffer_t)&rpc_buffer, sizeof(rpc_t), rpc_exec);
 }
