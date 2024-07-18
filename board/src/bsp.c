@@ -425,7 +425,7 @@ static void MX_SPI2_Init(void) {
     hspi2.Init.CLKPolarity = SPI_POLARITY_LOW;
     hspi2.Init.CLKPhase = SPI_PHASE_1EDGE;
     hspi2.Init.NSS = SPI_NSS_SOFT;
-    hspi2.Init.BaudRatePrescaler = SPI_BAUDRATEPRESCALER_128;
+    hspi2.Init.BaudRatePrescaler = SPI_BAUDRATEPRESCALER_16;
     hspi2.Init.FirstBit = SPI_FIRSTBIT_MSB;
     hspi2.Init.TIMode = SPI_TIMODE_DISABLED;
     hspi2.Init.CRCCalculation = SPI_CRCCALCULATION_DISABLE;
@@ -797,19 +797,24 @@ void serial_read(buffer_t dest, length_t length, callback_t oncomplete) {
     HAL_UART_Receive_IT(&huart1, dest, length);
 }
 
+#define MAX_SERIAL_PACKET (256)
+static uint8_t serial_buffer[MAX_SERIAL_PACKET];
+
 void serial_write(const buffer_t data, length_t length, callback_t oncomplete) {
     // Poll ready
     while (serial_lock) {
         // Spinlock
     }
-    serial_lock = true;
-    serial_txcomplete = oncomplete;
-    HAL_UART_Transmit_IT(&huart1, data, length);
+    if (length <= MAX_SERIAL_PACKET) {
+        memcpy(serial_buffer, data, length);
+        serial_lock = true;
+        serial_txcomplete = oncomplete;
+        HAL_UART_Transmit_IT(&huart1, serial_buffer, length);
+    }
 }
 
 void serial_print(const char* str) { serial_write(str, strlen(str), NULL); }
 
-#define MAX_SERIAL_PACKET (256)
 static char print_buffer[MAX_SERIAL_PACKET];
 
 void serial_printf(const char* fmt, ...) {

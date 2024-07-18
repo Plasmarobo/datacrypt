@@ -15,8 +15,8 @@ int main() {
     leds_init();
     display_init(game_init);
     flash_init(NULL);
-    serial_write("\r\nBOOT\r\n", 8, NULL);
     rpc_init();
+    serial_write("\r\nBOOT Complete\r\n", 17, NULL);
     scheduler_freerun();
     return 0;
 }

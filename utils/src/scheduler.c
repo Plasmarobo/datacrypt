@@ -1,6 +1,7 @@
 #include "scheduler.h"
 
 #include <stddef.h>
+#include <string.h>
 
 #include "defs.h"
 

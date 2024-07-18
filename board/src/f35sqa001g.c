@@ -38,7 +38,8 @@
 #define FLASH_QUEUE_LENGTH (4)
 #define FLASH_STATE_MAX_DEPTH (8)
 
-#define FLASH_TIMEOUT_MS (5)
+#define FLASH_TIMEOUT_MS (75)
+#define FLASH_POLL_US (100)
 
 // 32 bit header indicating the invalid page table follows
 #define MAGIC_BYTES_INVALID_PAGE_TABLE (0x9A6E7ABE)
@@ -61,6 +62,9 @@
 #define STATUS_ECCS0 (0x10)
 #define STATUS_ECCS1 (0x20)
 
+#define JEDEC_OFFSET (2)
+#define FEATURE_OFFSET (2)
+
 #define BYTE_MASK (0x07FF)
 
 typedef struct {
@@ -69,7 +73,8 @@ typedef struct {
 } flash_transaction_t;
 
 static timespan_t poll_interval;
-static volatile uint8_t tx_rx_buffer[MAX_TRANSACTION_BYTES];
+static uint8_t tx_rx_buffer[MAX_TRANSACTION_BYTES];
+static bool spi_cs_hold_flag;
 static uint8_t jedec_id[JEDEC_BYTES];
 
 static flash_page_address_t block_page_address;
@@ -87,15 +92,16 @@ static task_handle_t timeout_task = NULL;
 static task_handle_t poll_task = NULL;
 static uint16_t bytes_written;
 
-STACK(op_stack, callback_t, 8);
+STACK(op_stack, callback_t, 16);
+STACK(name_stack, const char*, 16);
 
 static void spi_start();
 static void spi_finish();
 
-static void spi_write_read(buffer_t transmit, length_t tx_len, buffer_t receive,
-                           length_t rx_len, callback_t oncomplete);
-static void spi_write(buffer_t buffer, length_t length);
-static void spi_read(buffer_t buffer, length_t length);
+static bool spi_write_read(buffer_t buffer, length_t tx_len, length_t rx_len,
+                           callback_t oncomplete);
+static bool spi_write(buffer_t buffer, length_t length, callback_t oncomplete);
+static bool spi_read(buffer_t buffer, length_t length, callback_t oncomplete);
 
 // static bool write(buffer_t buffer, length_t len, callback_t oncomplete);
 // static bool read(buffer_t buffer, length_t len, callback_t oncomplete);
@@ -103,6 +109,7 @@ static void config_polling_op(timespan_t interval, timespan_t timeout);
 static void status_poll(int32_t status);
 static void check_status(int32_t status);
 static void timeout_handler(int32_t status);
+static void check_bad_block(int32_t status);
 static void bad_block_scan_start(int32_t status);
 static void flash_write_cache(uint16_t byte_address, buffer_t source,
                               length_t length);
@@ -112,7 +119,21 @@ static void flash_flush_cache(int32_t status);
 static void read_status(int32_t status);
 static void op_handler_pop(int32_t status);
 
-static void push_op(callback_t op) { stack_push(&op_stack, &op); }
+#ifdef TRACE_NAMES
+#define STRINGIFY_LITERAL(x) #x
+#define STRINGIFY(x) STRINGIFY_LITERAL(x)
+#define PUSH_OP(x) push_op(x, STRINGIFY(x))
+static void push_op(callback_t op, const char* fnname) {
+    stack_push(&name_stack, &fnname);
+    if (fnname != NULL) {
+        serial_printf("PUSH: %s\r\n", fnname);
+    }
+#else
+#define PUSH_OP(x) push_op(x)
+static void push_op(callback_t op) {
+#endif
+    stack_push(&op_stack, &op);
+}
 
 // Enables re-using cache where possible
 static void mark_cache_clean(int32_t status) {
@@ -128,11 +149,11 @@ static void spi_start() { gpio_set(FLASH_CS, false); }
 // Releases CS
 static void spi_finish() { gpio_set(FLASH_CS, true); }
 
-static bool spi_write_read(buffer_t transmit, length_t tx_len, buffer_t receive,
-                           length_t rx_len, callback_t oncomplete) {
+static bool spi_write_read(buffer_t buffer, length_t tx_len, length_t rx_len,
+                           callback_t oncomplete) {
     operation_callback = oncomplete;
     gpio_set(FLASH_CS, false);
-    HAL_SPI_TransmitReceive_DMA(&hspi2, transmit, receive, tx_len + rx_len);
+    HAL_SPI_TransmitReceive_DMA(&hspi2, buffer, buffer, tx_len + rx_len);
     return true;
 }
 
@@ -145,14 +166,17 @@ static bool spi_write(buffer_t buffer, length_t len, callback_t oncomplete) {
 
 static bool spi_read(buffer_t buffer, length_t len, callback_t oncomplete) {
     operation_callback = oncomplete;
+    // Avoid sending possible reset command (0xFF)
+    // zero is a safe dummy value
+    memset(buffer, 0, len);
     gpio_set(FLASH_CS, false);
     HAL_SPI_Receive_DMA(&hspi2, buffer, len);
     return true;
 }
 
-static void set_write_enable_latch(int32_t status) {
+static void set_write_enable_latch(callback_t oncomplete) {
     tx_rx_buffer[0] = WRITE_ENABLE;
-    spi_write(tx_rx_buffer, 1, op_handler_pop);
+    spi_write(tx_rx_buffer, 1, oncomplete);
 }
 
 // Load a page into the chip cache
@@ -161,31 +185,36 @@ static void populate_cache(int32_t status) {
     tx_rx_buffer[1] = TIMING_BYTE;
     tx_rx_buffer[2] = (block_page_address >> 8) & 0xFF;
     tx_rx_buffer[3] = block_page_address & 0xFF;
-    config_polling_op(MICROS(TRD_US), FLASH_TIMEOUT_MS);
+    config_polling_op(MICROS(TRD_US), MICROS(FLASH_POLL_US));
+    PUSH_OP(mark_cache_clean);
     spi_start();
-    spi_write(tx_rx_buffer, 4, mark_cache_clean);
+    spi_write(tx_rx_buffer, 4, status_poll);
 }
 
 // Fetch data from chip
 static void read_bytes(int32_t status) {
+    spi_cs_hold_flag = false;  // Allow CS reset
     spi_read(current_transaction.data, current_transaction.size,
              op_handler_pop);
 }
 
-// Read cache into memory buffer
+// Read cache into host memory buffer
 static void read_cache(int32_t status) {
     tx_rx_buffer[0] = READ_FROM_CACHE;
     tx_rx_buffer[1] = (byte_address >> 8) & 0xFF;
     tx_rx_buffer[2] = byte_address & 0xFF;
     tx_rx_buffer[3] = TIMING_BYTE;
+    spi_cs_hold_flag = true;
     spi_write(tx_rx_buffer, 4, read_bytes);
 }
 
-// Write cache from memory buffer
+// Write cache from host memory buffer
 static void write_cache(int32_t status) {
+    spi_cs_hold_flag = true;
     tx_rx_buffer[0] = RANDOM_PROGRAM_DATA_LOAD;
     tx_rx_buffer[1] = (byte_address >> 8) & 0xFF;
     tx_rx_buffer[2] = byte_address & 0xFF;
+    spi_cs_hold_flag = true;
     spi_write(tx_rx_buffer, 3, flash_stream_data);
 }
 
@@ -193,7 +222,7 @@ static void write_cache(int32_t status) {
 static void get_feature(int32_t status) {
     tx_rx_buffer[0] = GET_FEATURE;
     tx_rx_buffer[1] = byte_address & 0xFF;
-    spi_write_read(tx_rx_buffer, 2, &feature_value, 1, op_handler_pop);
+    spi_write_read(tx_rx_buffer, 2, 1, op_handler_pop);
 }
 
 // Write register/feature to chip
@@ -209,9 +238,22 @@ static void op_handler_pop(int32_t status) {
     callback_t handler = NULL;
     if (!stack_empty(&op_stack)) {
         stack_pop(&op_stack, &handler);
-        if (NULL != handler) {
-            handler(status);
+#ifdef TRACE_NAMES
+        const char* name = NULL;
+        stack_pop(&name_stack, &name);
+        if (NULL != name) {
+            serial_printf("POP: %s %08x\r\n", name);
+        } else {
+            serial_print("POPPED NULL\r\n");
         }
+#endif
+        if (NULL != handler) {
+            if (NULL == task_immediate_signal(handler, status)) {
+                serial_printf("Scheduling failed\r\n");
+            }
+        }
+    } else {
+        serial_print("Stack empty...\r\n");
     }
 }
 
@@ -222,7 +264,7 @@ static void status_poll(int32_t status) {
             timeout_task =
                 task_delayed_unique(timeout_handler, MILLIS(FLASH_TIMEOUT_MS));
         }
-        poll_task = task_delayed(read_status, MILLIS(poll_interval));
+        poll_task = task_delayed(read_status, poll_interval);
     } else {
         op_handler_pop(status);
     }
@@ -238,9 +280,9 @@ static void mark_bbt_page_1(int32_t status) {
 
 static void mark_bad_block(int32_t status) {
     general_buffer = BAD_BLOCK_VALUE;
-    push_op(flash_flush_cache);
-    push_op(mark_bbt_page_1);
-    push_op(flash_flush_cache);
+    PUSH_OP(flash_flush_cache);
+    PUSH_OP(mark_bbt_page_1);
+    PUSH_OP(flash_flush_cache);
     bytes_written = 0;
     cache_dirty = false;
     byte_address = OOB_BASE_ADDRESS;
@@ -251,42 +293,49 @@ static void check_bbt_value(int32_t status) {
     if (FLASH_SUCCESS == status) {
         if (ERASED_VALUE != general_buffer) {
             // Block is bad!
+            serial_printf("Bad Block at %04x (%d)\r\n", block_page_address,
+                          BLOCK(block_page_address));
             block_bad = true;
         }
-        if (!(block_page_address & PAGE_MASK)) {
+        if ((block_page_address & PAGE_MASK) == 0) {
             // Check page 2
             block_page_address += 1;
-            byte_address = OOB_BASE_ADDRESS;
-            general_buffer = ERASED_VALUE;
-            push_op(check_bbt_value);
-            populate_cache(FLASH_SUCCESS);
+            task_immediate(check_bad_block);
         } else {
-            op_handler_pop(status);
+            serial_printf("Block %d done\r\n", BLOCK(block_page_address));
+            if (BLOCK(block_page_address) >= (BLOCK_COUNT - 1)) {
+                serial_print("BBT Complete\r\n");
+                op_handler_pop(status);
+            } else {
+                block_page_address += PAGES_PER_BLOCK - 1;
+                task_immediate(check_bad_block);
+            }
         }
+    } else {
+        serial_printf("BBT Check failed %04x\r\n", status);
     }
 }
 
 static void check_bad_block(int32_t status) {
     // Load first page
     block_bad = false;
-    block_page_address = block_page_address & BLOCK_MASK;
-    byte_address = OOB_BASE_ADDRESS;  // First byte in OOB
     general_buffer = ERASED_VALUE;
-    push_op(check_bbt_value);
+    byte_address = OOB_BASE_ADDRESS;
+    current_transaction.data = &general_buffer;
+    current_transaction.size = 1;
+    PUSH_OP(check_bbt_value);
+    PUSH_OP(read_cache);
     populate_cache(FLASH_SUCCESS);
 }
 
 static void bad_block_scan_start(int32_t status) {
     block_page_address = PAGE_ADDRESS(0, 0);
     // Factory bad block markers are in the first byte of spare
-    byte_address = PAGE_SIZE;
-    current_transaction.data = &general_buffer;
-    current_transaction.size = 1;
     check_bad_block(FLASH_SUCCESS);
 }
 
 static void flash_post_reset(int32_t status) {
-    push_op(bad_block_scan_start);
+    PUSH_OP(bad_block_scan_start);
     task_delayed(query_jedec, MICROS(TRST_US));
 };
 
@@ -294,7 +343,7 @@ static void flash_reset(int32_t status) {
     // Wait for TRST then transition to startup scan
     flash_busy = true;
     tx_rx_buffer[0] = 0xFF;
-    write(tx_rx_buffer, 1, flash_post_reset);
+    spi_write(tx_rx_buffer, 1, flash_post_reset);
 };
 
 // Warning: this conducts the actual block erase, check bbt first
@@ -305,8 +354,8 @@ static void block_erase(int32_t status) {
         tx_rx_buffer[2] = (block_page_address >> 8) & 0xFF;
         tx_rx_buffer[3] = block_page_address & 0xFF;
         cache_dirty = true;
-        config_polling_op(MILLIS(TERASE_MS), FLASH_TIMEOUT_MS);
-        write(tx_rx_buffer, 4, status_poll);
+        config_polling_op(MILLIS(TERASE_MS), MICROS(FLASH_POLL_US));
+        spi_write(tx_rx_buffer, 4, status_poll);
     } else {
         op_handler_pop(FLASH_ERR_BAD_STATE);
     }
@@ -314,14 +363,21 @@ static void block_erase(int32_t status) {
 
 static void flash_erase_block(flash_page_address_t address) {
     block_page_address = address & BLOCK_MASK;
-    push_op(block_erase);
-    push_op(check_bad_block);
-    op_handler_pop(FLASH_SUCCESS);
+    PUSH_OP(block_erase);
+    set_write_enable_latch(check_bad_block);
 };
 
 static void flash_stream_data(int32_t status) {
-    bytes_written += current_transaction.size;
-    write(current_transaction.data, current_transaction.size, op_handler_pop);
+    uint16_t bytes_to_write = current_transaction.size - bytes_written;
+    if (bytes_to_write > MAX_TRANSACTION_BYTES) {
+        bytes_to_write = MAX_TRANSACTION_BYTES;
+        // We have more to stream, queue op
+        PUSH_OP(flash_stream_data);
+        spi_cs_hold_flag = true;
+    }
+    bytes_written += bytes_to_write;
+    uint8_t* write_ptr = current_transaction.data + bytes_written;
+    spi_write(write_ptr, bytes_to_write, op_handler_pop);
 };
 
 // Programs bytes in the write cache
@@ -340,6 +396,7 @@ static void flash_write_cache(uint16_t byte_address_, buffer_t source,
     tx_rx_buffer[2] = byte_address_ & 0xFF;
     current_transaction.data = source;
     current_transaction.size = length;
+    spi_cs_hold_flag = true;
     spi_write(tx_rx_buffer, 3, flash_stream_data);
 };
 
@@ -359,25 +416,30 @@ static void flash_program(int32_t status) {
     tx_rx_buffer[3] = block_page_address & 0xFF;
     bytes_written = 0;
     cache_dirty = false;
-    config_polling_op(MICROS(TPROG_US), FLASH_TIMEOUT_MS);
-    write(tx_rx_buffer, 4, status_poll);
+    config_polling_op(MICROS(TPROG_US), MICROS(FLASH_POLL_US));
+    spi_write(tx_rx_buffer, 4, status_poll);
 };
 
-// Starts a flush op
+// Starts a flushing op
+// needs to be called before write/erase operations
 static void flash_flush_cache(int32_t status) {
-    tx_rx_buffer[0] = WRITE_ENABLE;
-    write(tx_rx_buffer, 1, flash_program);
+    set_write_enable_latch(flash_program);
 };
 
-static void dump_jedec(int32_t status) {
+static void verify_jedec(int32_t status) {
+    memcpy(jedec_id, tx_rx_buffer + JEDEC_OFFSET, 3);
     serial_printf("RX:");
     for (uint8_t i = 0; i < 3; ++i) {
         serial_printf(" 0x%02x", jedec_id[i]);
     }
     serial_print("\r\n");
+    if (jedec_id[0] == 0xCD && jedec_id[1] == 0x71 && jedec_id[2] == 0x71) {
+        op_handler_pop(FLASH_SUCCESS);
+    } else {
+        serial_printf("Uknown JEDEC ID\r\n");
+        op_handler_pop(FLASH_ERR_UNKNOWN_ID);
+    }
 }
-
-static void read_jedec(int32_t status) { read(jedec_id, 3, dump_jedec); };
 
 static void query_jedec(int32_t status) {
     tx_rx_buffer[0] = JEDEC_READ;
@@ -385,7 +447,7 @@ static void query_jedec(int32_t status) {
     tx_rx_buffer[2] = 0x00;
     tx_rx_buffer[3] = 0x00;
     tx_rx_buffer[4] = 0x00;
-    write(tx_rx_buffer, 2, read_jedec);
+    spi_write_read(tx_rx_buffer, 2, 3, verify_jedec);
 }
 
 static void timeout_handler(int32_t status) {
@@ -398,8 +460,10 @@ static void timeout_handler(int32_t status) {
 
 static void read_status(int32_t status) {
     byte_address = STATUS_REGISTER;
-    push_op(check_status);
-    get_feature(FLASH_SUCCESS);
+    PUSH_OP(check_status);
+    if (NULL == task_immediate_signal(get_feature, FLASH_SUCCESS)) {
+        serial_printf("Scheduling failed\r\n");
+    }
 }
 
 static void config_polling_op(timespan_t interval, timespan_t timeout) {
@@ -408,8 +472,9 @@ static void config_polling_op(timespan_t interval, timespan_t timeout) {
 }
 
 static void check_status(int32_t status) {
+    feature_value = tx_rx_buffer[FEATURE_OFFSET];
     if (feature_value & STATUS_OIP) {
-        poll_task = task_delayed(read_status, MILLIS(poll_interval));
+        poll_task = task_delayed(read_status, poll_interval);
     } else {
         poll_task = NULL;
         if (NULL != timeout_task) {
@@ -444,8 +509,8 @@ static bool lock_flash(callback_t notify) {
         }
         return false;
     }
-    push_op(notify);
-    push_op(unlock_flash);
+    PUSH_OP(notify);
+    PUSH_OP(unlock_flash);
     return true;
 }
 
@@ -456,7 +521,7 @@ void flash_read(flash_page_address_t bp_addr, uint16_t byte_address_,
         current_transaction.size = size;
         if ((cache_dirty) || (bp_addr != block_page_address)) {
             // Need to fetch the page from memory
-            push_op(read_cache);
+            PUSH_OP(read_cache);
             populate_cache(FLASH_SUCCESS);
         } else {
             // Our page is already in memory, we can optimize the read
@@ -490,7 +555,7 @@ void flash_update(flash_page_address_t page, uint16_t byte_address_,
             write_cache(FLASH_SUCCESS);
         } else {
             block_page_address = page;
-            push_op(write_cache);
+            PUSH_OP(write_cache);
             populate_cache(FLASH_SUCCESS);
         }
     }
@@ -515,8 +580,15 @@ void flash_init(callback_t on_init) {
 }
 
 void flash_op_complete_handler(int32_t status) {
-    spi_finish();
+    if (!spi_cs_hold_flag) {
+        spi_finish();
+    } else {
+        spi_cs_hold_flag = false;
+    }
     if (NULL != operation_callback) {
-        operation_callback(status);
+        if (NULL == task_immediate_signal(operation_callback, status)) {
+            serial_printf("Scheduling failed\r\n");
+        }
+        operation_callback = NULL;
     }
 }

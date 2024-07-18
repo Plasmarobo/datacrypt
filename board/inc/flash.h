@@ -11,14 +11,15 @@
 #define FLASH_ERR_INVALID_ARG (-6)
 #define FLASH_ERR_FAILURE (-7)
 #define FLASH_ERR_CACHE_OVERWRITE (-8)
+#define FLASH_ERR_UNKNOWN_ID (-9)
 
 #define PAGE_SIZE (2048)
 #define BLOCK_COUNT (1024)
 #define PAGES_PER_BLOCK (64)
 
-#define PAGE_MASK (0x1F)
-#define BLOCK_MASK (0xFFE0)
-#define BLOCK(x) ((x & BLOCK_MASK) >> 5)
+#define PAGE_MASK (0x3F)
+#define BLOCK_MASK (0xFFC0)
+#define BLOCK(x) ((x & BLOCK_MASK) >> 6)
 #define PAGE(x) (x & PAGE_MASK)
 
 #define ERASED_VALUE (0xFF)
