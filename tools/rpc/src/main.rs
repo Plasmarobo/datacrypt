@@ -4,12 +4,12 @@ use std::time::Duration;
 use std::fmt::Debug;
 use std::io::Write;
 use std::sync::{mpsc::{channel, Sender, Receiver, TryRecvError}, RwLock, Arc};
-use std::{thread::{self, JoinHandle}};
+use std::{thread::{self, JoinHandle}, time::{SystemTime, UNIX_EPOCH}, fs::File};
 use std::io;
 
 #[macro_use] extern crate scan_rules;
 
-const MAX_BUFFER:usize = 512;
+const MAX_BUFFER:usize = 64 + 6;
 
 fn rpc_header(code: u8, address: u32, length:u8, data:Option<Vec<u8>>) -> Vec<u8>
 {
@@ -41,7 +41,7 @@ impl AsyncSerial
         let notify = Arc::new(RwLock::new(false));
         let mut t_port = serialport::new(dev_path.clone(), 115_200)
             .timeout(Duration::from_millis(10))
-            .open().expect("Failed ot open port");
+            .open().expect("Failed to open port");
 
         let rx_notify = Arc::clone(&notify);
         let tx_notify = Arc::clone(&notify);
@@ -79,6 +79,7 @@ impl AsyncSerial
 
                 match tx_port.try_recv() {
                     Ok(buffer) => {
+                        println!("{:?}", buffer);
                         t_port.write_all(buffer.as_slice()).expect("failed to write to serialport")
                     }
                     Err(TryRecvError::Empty) => (),
@@ -128,6 +129,38 @@ impl Drop for AsyncSerial
     }
 }
 
+
+fn dump_flash(serial: &AsyncSerial)
+{
+    const FLASH_SIZE:usize = 1024 * (2048 + 64);
+    const CHUNK_SIZE:u8 = 64;
+    let mut address: u32 = 0;
+    let mut file = File::create(format!("flash_dump_{:?}.bin", SystemTime::now().elapsed().unwrap())).unwrap();
+    let mut buffer = Vec::<u8>::new();
+    while address < FLASH_SIZE as u32
+    {
+
+        serial.write(rpc_header('r' as u8, address, CHUNK_SIZE, None));
+        // Start a time out
+        let start = SystemTime::now().elapsed().unwrap();
+        while buffer.len() < CHUNK_SIZE.into()
+        {
+            if let Some(data) = serial.try_read()
+            {
+                buffer.extend(data);
+            }
+            if (SystemTime::now().elapsed().unwrap() - start).as_secs() > 1
+            {
+                // Timeout!
+                panic!("Read flash timeout");
+            }
+        }
+        // Write out to file
+        file.write(&buffer[0..CHUNK_SIZE.into()]);
+        address += CHUNK_SIZE as u32;
+    }
+}
+
 fn main() {
     let args: Vec<String> = env::args().collect();
     println!("{:?}", args);
@@ -141,7 +174,7 @@ fn main() {
     };
     let serial = AsyncSerial::new(dev_path);
     let (command_tx, command_rx) = channel();
-
+    dump_flash(&serial);
     thread::spawn(move || {
         loop {
             println!("Enter command");

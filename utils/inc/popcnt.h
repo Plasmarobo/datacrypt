@@ -3,6 +3,7 @@
 
 #include <stdint.h>
 
-uint32_t pop_count(uint32_t i);
+uint32_t pop_count32(uint32_t i);
+uint8_t pop_count8(uint8_t i);
 
 #endif // POP_COUNT_H

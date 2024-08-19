@@ -15,14 +15,13 @@
 ######################################
 TARGET ?= DataCrypt
 APPDIR ?= app
+BOARD ?= stm32g0
 ######################################
 # building variables
 ######################################
 # debug build?
 DEBUG = 1
 # optimization
-OPT = -Os
-
 
 #######################################
 # paths
@@ -37,126 +36,52 @@ BUILD_DIR = build
 C_SOURCES = $(shell find $(APPDIR) -name '*.c')
 
 # Common sources
-C_SOURCES += $(shell find board -name '*.c')
 C_SOURCES += $(shell find utils -name '*.c')
-C_SOURCES +=  \
-drivers/STM32G0xx_HAL_Driver/Src/stm32g0xx_hal_adc.c \
-drivers/STM32G0xx_HAL_Driver/Src/stm32g0xx_hal_adc_ex.c \
-drivers/STM32G0xx_HAL_Driver/Src/stm32g0xx_ll_adc.c \
-drivers/STM32G0xx_HAL_Driver/Src/stm32g0xx_hal_rcc.c \
-drivers/STM32G0xx_HAL_Driver/Src/stm32g0xx_hal_rcc_ex.c \
-drivers/STM32G0xx_HAL_Driver/Src/stm32g0xx_ll_rcc.c \
-drivers/STM32G0xx_HAL_Driver/Src/stm32g0xx_hal_flash.c \
-drivers/STM32G0xx_HAL_Driver/Src/stm32g0xx_hal_flash_ex.c \
-drivers/STM32G0xx_HAL_Driver/Src/stm32g0xx_hal_gpio.c \
-drivers/STM32G0xx_HAL_Driver/Src/stm32g0xx_hal_dma.c \
-drivers/STM32G0xx_HAL_Driver/Src/stm32g0xx_hal_dma_ex.c \
-drivers/STM32G0xx_HAL_Driver/Src/stm32g0xx_ll_dma.c \
-drivers/STM32G0xx_HAL_Driver/Src/stm32g0xx_hal_pwr.c \
-drivers/STM32G0xx_HAL_Driver/Src/stm32g0xx_hal_pwr_ex.c \
-drivers/STM32G0xx_HAL_Driver/Src/stm32g0xx_hal_cortex.c \
-drivers/STM32G0xx_HAL_Driver/Src/stm32g0xx_hal.c \
-drivers/STM32G0xx_HAL_Driver/Src/stm32g0xx_hal_exti.c \
-drivers/STM32G0xx_HAL_Driver/Src/stm32g0xx_hal_i2c.c \
-drivers/STM32G0xx_HAL_Driver/Src/stm32g0xx_hal_i2c_ex.c \
-drivers/STM32G0xx_HAL_Driver/Src/stm32g0xx_hal_spi.c \
-drivers/STM32G0xx_HAL_Driver/Src/stm32g0xx_hal_spi_ex.c \
-drivers/STM32G0xx_HAL_Driver/Src/stm32g0xx_hal_tim.c \
-drivers/STM32G0xx_HAL_Driver/Src/stm32g0xx_hal_tim_ex.c \
-drivers/STM32G0xx_HAL_Driver/Src/stm32g0xx_hal_uart.c \
-drivers/STM32G0xx_HAL_Driver/Src/stm32g0xx_hal_uart_ex.c \
-drivers/STM32G0xx_HAL_Driver/Src/stm32g0xx_hal_crc.c \
-drivers/STM32G0xx_HAL_Driver/Src/stm32g0xx_hal_crc_ex.c
+C_SOURCES += $(shell find drivers/datacrypt/src -name '*.c')
 
-# ASM sources
-ASM_SOURCES =  \
-startup_stm32g030xx.s
+AS_INCLUDES =
 
-#######################################
-# binaries
-#######################################
-PREFIX = arm-none-eabi-
-# The gcc compiler bin path can be either defined in make command via GCC_PATH variable (> make GCC_PATH=xxx)
-# either it can be added to the PATH environment variable.
-ifdef GCC_PATH
-CC = $(GCC_PATH)/$(PREFIX)gcc
-AS = $(GCC_PATH)/$(PREFIX)gcc -x assembler-with-cpp
-CP = $(GCC_PATH)/$(PREFIX)objcopy
-SZ = $(GCC_PATH)/$(PREFIX)size
-else
-CC = $(PREFIX)gcc
-AS = $(PREFIX)gcc -x assembler-with-cpp
-CP = $(PREFIX)objcopy
-SZ = $(PREFIX)size
-endif
-HEX = $(CP) -O ihex
-BIN = $(CP) -O binary -S
- 
-#######################################
-# CFLAGS
-#######################################
-# cpu
-CPU = -mcpu=cortex-m0plus
-
-# fpu
-# NONE for Cortex-M0/M0+/M3
-
-# float-abi
-
-
-# mcu
-MCU = $(CPU) -mthumb $(FPU) $(FLOAT-ABI)
-
-# macros for gcc
-# AS defines
-AS_DEFS = 
-
-# C defines
-C_DEFS =  \
--DUSE_HAL_DRIVER \
--DSTM32G030xx
-
+ASM_SOURCES =
 
 # AS includes
-AS_INCLUDES = 
 
 # C includes
 C_INCLUDES =  \
--Iboard/inc \
--Idrivers/STM32G0xx_HAL_Driver/Inc \
--Idrivers/STM32G0xx_HAL_Driver/Inc/Legacy \
--Idrivers/CMSIS/Device/ST/STM32G0xx/Include \
--Idrivers/CMSIS/Include \
+-Iboard/$(BOARD)/inc \
+-Idrivers/board/include \
+-Idrivers/datacrypt/include \
 -Iapp/inc \
 -Iutils/inc \
 -Ithirdparty/littlefs
 
-CPP_INCLUDES += $(foreach dir,$(INCDIRS),-I$(dir))
+LIBS =
+LIBDIR =
+LDFLAGS =
+CFLAGS = 
+CPU =
+MCU =
 
+# Board specific make
+include board/$(BOARD).mk
+ 
 # compile gcc flags
-ASFLAGS = $(MCU) $(AS_DEFS) $(AS_INCLUDES) $(OPT) -Wall -fdata-sections -ffunction-sections
+ASFLAGS += $(MCU) $(AS_DEFS) $(AS_INCLUDES) $(OPT) -Wall -fdata-sections -ffunction-sections
 
 CFLAGS += $(MCU) $(C_DEFS) $(C_INCLUDES) $(OPT) -Wall -fdata-sections -ffunction-sections
+
+CPP_INCLUDES += $(foreach dir,$(INCDIRS),-I$(dir))
 
 ifeq ($(DEBUG), 1)
 CFLAGS += -g1 -gdwarf-2
 endif
 
-
 # Generate dependency information
 CFLAGS += -MMD -MP -MF"$(@:%.o=%.d)" -std=c11
 
-
-#######################################
-# LDFLAGS
-#######################################
-# link script
-LDSCRIPT = STM32G030C8Tx_FLASH.ld
-
 # libraries
-LIBS = -lc -lm -lnosys
-LIBDIR = -L$(BUILD_DIR)
-LDFLAGS = $(MCU) -specs=nano.specs -T$(LDSCRIPT) $(LIBDIR) $(LIBS) -Wl,-Map=$(BUILD_DIR)/$(TARGET).map,--cref -Wl,--gc-sections
+LIBS += -lc -lm
+LIBDIR += -L$(BUILD_DIR)
+LDFLAGS += $(MCU) -T$(LDSCRIPT) $(LIBDIR) $(LIBS) -Wl,-Map=$(BUILD_DIR)/$(TARGET).map,--cref -Wl,--gc-sections
 
 .PHONY: all test
 
@@ -170,14 +95,15 @@ test:
 # build the application
 #######################################
 # list of objects
-OBJECTS = $(addprefix $(BUILD_DIR)/,$(notdir $(C_SOURCES:.c=.o)))
+OBJECTS = $(addprefix $(BUILD_DIR)/,$(C_SOURCES:.c=.o))
 vpath %.c $(sort $(dir $(C_SOURCES)))
 # list of ASM program objects
-OBJECTS += $(addprefix $(BUILD_DIR)/,$(notdir $(ASM_SOURCES:.s=.o)))
+OBJECTS += $(addprefix $(BUILD_DIR)/,$(ASM_SOURCES:.s=.o))
 vpath %.s $(sort $(dir $(ASM_SOURCES)))
 
-$(BUILD_DIR)/%.o: %.c Makefile | $(BUILD_DIR) 
-	$(CC) -c $(CFLAGS) -Wa,-a,-ad,-alms=$(BUILD_DIR)/$(notdir $(<:.c=.lst)) $< -o $@
+$(BUILD_DIR)/%.o: %.c Makefile | $(BUILD_DIR)
+	mkdir -p $(BUILD_DIR)/$(dir $<)
+	$(CC) -c $(CFLAGS) -Wa,-a,-ad,-alms=$(BUILD_DIR)/$(<:.c=.lst) $< -o $@
 
 $(BUILD_DIR)/%.o: %.s Makefile | $(BUILD_DIR)
 	$(AS) -c $(CFLAGS) $< -o $@

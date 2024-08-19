@@ -6,11 +6,13 @@
 #include "defs.h"
 
 #define MAX_TASKS (64)
+#define EXEC_DEPTH_LIMIT (4)
 
 static timespan_t last_tick;
+static uint8_t exec_depth;
 static task_data_t tasks[MAX_TASKS];
-static callback_t future_waiting;
-static int32_t future_status;
+static volatile callback_t future_waiting;
+static volatile int32_t future_status;
 
 static task_data_t* get_free_task() {
     for (uint8_t i = 0; i < MAX_TASKS; ++i) {
@@ -82,6 +84,29 @@ task_handle_t task_delayed_signal(callback_t handler, timespan_t delay,
 
 // Searches for existing handler, overwrites if found
 // If duplicates exist, only relpaces the first found
+task_handle_t task_immediate_unique(callback_t handler) {
+    enter_critical();
+    task_data_t* slot = NULL;
+    for (uint8_t i = 0; i < MAX_TASKS; ++i) {
+        if ((handler == tasks[i].handler) && (TASK_FREE != tasks[i].type)) {
+            // Overwrite
+            slot = &tasks[i];
+            break;
+        } else if ((NULL == slot) && (TASK_FREE == tasks[i].type)) {
+            slot = &tasks[i];
+        }
+    }
+    if (NULL != slot) {
+        slot->handler = handler;
+        slot->time = 0;
+        slot->type = TASK_IMMEDIATE;
+        slot->elapsed = 0;
+        slot->status = 0;
+    }
+    exit_critical();
+    return slot;
+}
+
 task_handle_t task_delayed_unique(callback_t handler, timespan_t delay) {
     return task_delayed_unique_signal(handler, delay, 0);
 }
@@ -131,6 +156,7 @@ void task_abort(task_handle_t task) {
 }
 
 void scheduler_init() {
+    exec_depth = 0;
     for (uint8_t i = 0; i < MAX_TASKS; ++i) {
         tasks[i].handler = NULL;
         tasks[i].time = 0;
@@ -143,16 +169,17 @@ void scheduler_init() {
 }
 
 void scheduler_exec() {
-    timespan_t delta = 0;
-    timespan_t now = microseconds();
-    if (last_tick > now) {
-        // Rollover,
-        delta = now;
-    } else {
-        delta = now - last_tick;
-    }
-    // Minimum time slice is 1us
-    if (delta > 0) {
+    exec_depth++;
+    if (exec_depth < EXEC_DEPTH_LIMIT) {
+        timespan_t delta = 0;
+        timespan_t now = microseconds();
+        if (last_tick > now) {
+            // Rollover,
+            delta = now;
+        } else {
+            delta = now - last_tick;
+        }
+        // Minimum time slice is 1us
         last_tick = now;
         for (uint8_t i = 0; i < MAX_TASKS; ++i) {
             if ((TASK_DISABLED >= tasks[i].type) || !tasks[i].handler) {
@@ -162,21 +189,21 @@ void scheduler_exec() {
             switch (tasks[i].type) {
                 case TASK_IMMEDIATE:
                     // Invoke and free the task
-                    tasks[i].handler(tasks[i].status);
                     tasks[i].type = TASK_PENDING_FREE;
+                    tasks[i].handler(tasks[i].status);
                     break;
                 case TASK_DELAYED:
                     if (tasks[i].elapsed >= tasks[i].time) {
                         // Invoke and free the task
-                        tasks[i].handler(tasks[i].status);
                         tasks[i].type = TASK_PENDING_FREE;
+                        tasks[i].handler(tasks[i].status);
                     }
                     break;
                 case TASK_PERIODIC:
                     if (tasks[i].elapsed >= tasks[i].time) {
                         // Invoke, but do not free
-                        tasks[i].handler(tasks[i].status);
                         tasks[i].elapsed = 0;
+                        tasks[i].handler(tasks[i].status);
                     }
                     break;
                 case TASK_DISABLED:      // intentional fallthrough
@@ -186,11 +213,12 @@ void scheduler_exec() {
                     break;
             }
         }
-        // Free pending tasks
-        for (uint8_t i = 0; i < MAX_TASKS; ++i) {
-            if (tasks[i].type == TASK_PENDING_FREE) {
-                tasks[i].type = TASK_FREE;
-            }
+    }
+    exec_depth--;
+    // Free pending tasks
+    for (uint8_t i = 0; i < MAX_TASKS; ++i) {
+        if (tasks[i].type == TASK_PENDING_FREE) {
+            tasks[i].type = TASK_FREE;
         }
     }
 }
@@ -224,14 +252,17 @@ callback_t future_get()
 // Spins until the callback resolves, moves status back into blocking context
 int32_t future_await(callback_t awaited_future, timespan_t timeout)
 {
-   
+    if (NULL == awaited_future) {
+        // Protect against nesting futures
+        error_handler();
+    }
     // We only support ONE future to bound the stack/scheduler depth
     timespan_t start = microseconds();
     while(NULL != future_waiting)
     {
         scheduler_exec();
-        if ((microseconds() - start) > timeout)
-        {
+        timespan_t delta = (microseconds() - start);
+        if (delta > timeout) {
             future_resolve(FUTURE_TIMEOUT);
             break;
         }

@@ -5,10 +5,16 @@
 
 static timespan_t _us = 0;
 void tick(timespan_t us) { _us += us; }
+static void tick_wrapper(int32_t amount) {
+    task_delayed(tick_wrapper, 1);
+    tick((timespan_t)amount);
+}
+
 timespan_t microseconds() { return _us; }
 timespan_t milliseconds() { return _us / 1000; }
 void enter_critical(){}
 void exit_critical(){}
+void error_handler() { FAIL("Error handler hit"); }
 
 static int a, b, c;
 void inc_a(int32_t x) { a += 1; }
@@ -37,7 +43,7 @@ TEST_CASE("Scheduler exec runs immediate task", "[scheduler]") {
     task_immediate(inc_a);
     REQUIRE(a == 0);
     scheduler_exec();
-    REQUIRE(a == 0);
+    REQUIRE(a == 1);
     tick(1);
     scheduler_exec();
     REQUIRE(a == 1);
@@ -376,4 +382,31 @@ TEST_CASE("Scheduler nested future rejected", "[futures]")
     future_t b = future_get();
     REQUIRE(a != NULL);
     REQUIRE(b == NULL);
+}
+
+static uint32_t circles = 0;
+
+static void circular_future(int32_t _) {
+    if (circles < 10) {
+        ++circles;
+        // Intentionally do not protect here
+        future_t f = future_get();
+        future_await(f, 10);
+    }
+}
+
+TEST_CASE("Scheduler circular futures prevented", "[futures]") {
+    scheduler_init();
+    scheduler_exec();
+    tick(1);
+    // Simulate time
+    task_periodic(tick_op, 1);
+    tick(1);
+    // Call function on next tick
+    task_immediate(circular_future);
+    scheduler_exec();
+    // Function should have only been called once
+    // if it's called more than once (or hangs), it make be invoked before the
+    // timer can tick Which will fill the stack and lock up the scheduler
+    REQUIRE(circles == 1);
 }

@@ -3,6 +3,8 @@
 
 #include "adc.h"
 #include "bsp.h"
+#include "filesystem.h"
+#include "flash.h"
 #include "game.h"
 #include "rpc.h"
 #include "scheduler.h"
@@ -14,9 +16,9 @@ int main() {
     random_init();
     leds_init();
     display_init(game_init);
-    flash_init(NULL);
+    flash_init(filesystem_init);
     rpc_init();
-    serial_write("\r\nBOOT Complete\r\n", 17, NULL);
+    dbgprint("\r\nBOOT Complete\r\n");
     scheduler_freerun();
     return 0;
 }

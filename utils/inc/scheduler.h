@@ -12,6 +12,7 @@ extern "C" {
 // What is the maximum slice to execute a thread or task
 #define SCHEDULE_TIMESLICE_US (1)
 #define FUTURE_TIMEOUT (-96)
+#define FUTURE_BUSY (-97)
 
 typedef enum {
     TASK_FREE = 0,
@@ -47,9 +48,12 @@ task_handle_t task_delayed(callback_t task, timespan_t delay);
 task_handle_t task_delayed_signal(callback_t task, timespan_t delay,
                                   int32_t status);
 // Schedules or belays an existing task
+task_handle_t task_immediate_unique(callback_t task);
 task_handle_t task_delayed_unique(callback_t task, timespan_t delay);
 task_handle_t task_delayed_unique_signal(callback_t task, timespan_t delay,
                                          int32_t status);
+
+task_handle_t task_deferred(callback_t task, callback_t* signal);
 
 void task_signal(task_handle_t task, int32_t status);
 void task_abort(task_handle_t task);
@@ -58,11 +62,25 @@ void scheduler_init();
 void scheduler_exec();     // Single-step the scheduler 
 void scheduler_freerun();  // Will not return
 
+#define YIELD scheduler_exec()
+
 // Async await
 // Returns a future or NULL
 callback_t future_get();
 // Pumps scheduler, returns when the future completes
 int32_t future_await(callback_t awaited_future, timespan_t timeout);
+
+// Depends on an default future_t "future" being in-scope
+#define WITH_FUTURE(x, t)                     \
+    {                                         \
+        future = future_get();                \
+        if (NULL != future) {                 \
+            x;                                \
+            status = future_await(future, t); \
+        } else {                              \
+            status = FUTURE_BUSY;             \
+        }                                     \
+    }
 
 #ifdef __cplusplus
 }

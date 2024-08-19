@@ -1,6 +1,9 @@
 #ifndef DEF_H
 #define DEF_H
 
+#include <stdarg.h>
+#include <stdbool.h>
+#include <stddef.h>
 #include <stdint.h>
 
 #ifdef __cplusplus
@@ -18,7 +21,7 @@ extern "C" {
 typedef void (*callback_t)(int32_t);
 typedef uint32_t length_t;
 typedef uint8_t* buffer_t;
-typedef uint32_t timespan_t;
+typedef uint64_t timespan_t;
 
 // ========== uS timer ==========
 #define MILLIS(x) (x * 1000)
@@ -29,6 +32,9 @@ timespan_t milliseconds();
 
 extern void enter_critical(void);
 extern void exit_critical(void);
+
+// Handle an unrecoverable error
+extern void error_handler(void);
 
 #ifdef __cplusplus
 }
