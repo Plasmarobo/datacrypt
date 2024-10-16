@@ -8,7 +8,6 @@
 #include "ringbuffer.h"
 #include "scheduler.h"
 #include "stack.h"
-#include "stm32.h"
 
 // Used to generate 8 dummy clocks
 #define NOOP (0x00)
@@ -79,6 +78,9 @@
 #define INVALID_ADDRESS (0xFFFFFFFF)
 
 static callback_t flash_event_handlers[FLASH_EV_MAX];
+#define FLASH_SIZE (BLOCK_COUNT * PAGES_PER_BLOCK * (PAGE_SIZE + OOB_SIZE))
+static uint8_t flash_cache[PAGE_SIZE + OOB_SIZE];
+static uint8_t flash_array[FLASH_SIZE];
 
 typedef struct {
     buffer_t data;
@@ -106,14 +108,6 @@ STACK(op_stack, callback_t, 8);
 #ifdef TRACE_NAMES
 STACK(name_stack, const char*, 16);
 #endif
-
-static void spi_start();
-static void spi_finish();
-
-static bool spi_write_read(buffer_t buffer, length_t tx_len, length_t rx_len,
-                           callback_t oncomplete);
-static bool spi_write(buffer_t buffer, length_t length, callback_t oncomplete);
-static bool spi_read(buffer_t buffer, length_t length, callback_t oncomplete);
 
 // static bool write(buffer_t buffer, length_t len, callback_t oncomplete);
 // static bool read(buffer_t buffer, length_t len, callback_t oncomplete);
@@ -159,7 +153,8 @@ static bool spi_write_read(buffer_t buffer, length_t tx_len, length_t rx_len,
     memset(buffer + tx_len, 0, rx_len);
     operation_callback = oncomplete;
     gpio_set(FLASH_CS, false);
-    HAL_SPI_TransmitReceive_DMA(&hspi2, buffer, buffer, tx_len + rx_len);
+    flash_eHAL_SPI_TransmitReceive_DMA(&hspi2, buffer, buffer, tx_len + rx_len);
+
     return true;
 }
 
@@ -251,6 +246,8 @@ static void op_handler_pop(int32_t status) {
         if (flash_event_handlers[FLASH_EV_IDLE] != NULL) {
             (flash_event_handlers[FLASH_EV_IDLE])(status);
         }
+    } else {
+        Error_Handler();
     }
 }
 
@@ -355,9 +352,7 @@ static void flash_program(int32_t status) {
 // Starts a flushing op
 // needs to be called before write/erase operations
 static void flash_flush_cache(int32_t status) {
-    // temporarily disable commit
-    // set_write_enable_latch(flash_program);
-    flash_program(FLASH_SUCCESS);
+    set_write_enable_latch(flash_program);
 };
 
 static void set_flash_ready(int32_t status) {
@@ -535,6 +530,7 @@ static bool lock_flash(callback_t notify) {
         }
         return false;
     }
+    flash_busy = true;
     PUSH_OP(notify);
     PUSH_OP(unlock_flash);
     return true;

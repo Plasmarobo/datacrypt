@@ -25,6 +25,7 @@ typedef uint32_t bbt_t;
 // BBT lives at start of flash
 #define BBT_BASE_ADDRESS (0)
 #define BBT_DWORDS (BLOCK_COUNT >> BBT_LOG2)
+#define BBT_WRITE_CHUNKS (FLASH_MAX)
 #define BBT_MAGIC (0xBADB10CC)
 
 // Bit shift should match log2(sizeof(bbt_t))
@@ -92,10 +93,15 @@ static void rebuild_bbt(void) {
         if (ERASED_VALUE != mark_buf) {
             // Write-down the specified bit
             bad_block_table[block >> BBT_LOG2] &= ~(0x01 << (block & BBT_MASK));
-            dbgprintf("BB:%d\r\n", block);
+            dbgprintf("\nBB:%d\r\n", block);
         }
     }
     // Our bbt is built
+    dbgprintf("BBT: ");
+    for (uint32_t i = 0; i < BBT_DWORDS; ++i) {
+        dbgprintf("%08x", bad_block_table[i]);
+    }
+    dbgprint("\r\n\n");
 }
 
 // Copy BBT from flash
@@ -124,7 +130,7 @@ static void bbt_init(int32_t status) {
             }
             WITH_FUTURE(
                 flash_update(translate_address(BBT_BASE_ADDRESS), sizeof(bbt_t),
-                             &bad_block_table, BAD_BLOCK_VALUE, future),
+                             &bad_block_table, sizeof(bad_block_table), future),
                 MILLIS(FILESYSTEM_TIMEOUT_MS));
             if (status) {
                 dbgprintf("FS:%d\r\n", status);

@@ -254,6 +254,18 @@ static void op_handler_pop(int32_t status) {
     }
 }
 
+static void op_handler_clear(int32_t status) {
+    callback_t handler;
+    while(!stack_empty(&op_stack))
+    {
+        stack_pop(&op_stack, &handler);
+        if (NULL != handler) {
+            handler(status);
+        }
+    }
+    unlock_flash(status);
+}
+
 // Poll chip for operation completion
 static void status_poll(int32_t status) {
     if (FLASH_SUCCESS == status) {
@@ -355,9 +367,7 @@ static void flash_program(int32_t status) {
 // Starts a flushing op
 // needs to be called before write/erase operations
 static void flash_flush_cache(int32_t status) {
-    // temporarily disable commit
-    // set_write_enable_latch(flash_program);
-    flash_program(FLASH_SUCCESS);
+    set_write_enable_latch(flash_program);
 };
 
 static void set_flash_ready(int32_t status) {
@@ -475,7 +485,8 @@ static void timeout_handler(int32_t status) {
     if (NULL != poll_task) {
         task_abort(poll_task);
         // Handle timeout
-        op_handler_pop(FLASH_ERR_TIMEOUT);
+        op_handler_clear(FLASH_ERR_TIMEOUT);
+        //op_handler_pop(FLASH_ERR_TIMEOUT);
         if (flash_event_handlers[FLASH_EV_TIMEOUT] != NULL) {
             (flash_event_handlers[FLASH_EV_TIMEOUT])(FLASH_ERR_TIMEOUT);
         }

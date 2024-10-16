@@ -390,9 +390,16 @@ void HAL_SPI_RxCpltCallback(SPI_HandleTypeDef* spi) {
     }
 }
 
-HAL_SPI_TxRxCpltCallback(SPI_HandleTypeDef* spi) {
+void HAL_SPI_TxRxCpltCallback(SPI_HandleTypeDef* spi) {
     if (SPI2 == spi->Instance) {
         task_immediate(flash_op_complete_handler);
+    }
+}
+
+void HAL_SPI_ErrorCallback(SPI_HandleTypeDef* spi)
+{
+    if (SPI2 == spi->Instance) {
+        task_immediate_signal(flash_op_complete_handler, -1);
     }
 }
 
@@ -428,8 +435,26 @@ void HAL_UART_RxCpltCallback(UART_HandleTypeDef* huart) {
     serial_rx_complete_handler(0);
 }
 
+void HAL_UART_AbortTransmitCpltCallback(UART_HandleTypeDef* huart)
+{
+    serial_tx_abort_handler(-2);
+}
+void HAL_UART_AbortReceiveCpltCallback(UART_HandleTypeDef* huart)
+{
+    serial_rx_abort_handler(-2);
+}
+
 void HAL_UART_ErrorCallback(UART_HandleTypeDef* huart) {
-    serial_abort_handler(-1);
+    if (huart->ErrorCode & HAL_UART_ERROR_FE) {
+        serial_rx_abort_handler(-1);
+    }
+    if (huart->ErrorCode & HAL_UART_ERROR_NE) {
+        serial_rx_abort_handler(-1);
+    }
+
+    if (huart->ErrorCode & HAL_UART_ERROR_ORE) {
+        serial_rx_abort_handler(-1);
+    }
 }
 
 /* USER CODE END 1 */

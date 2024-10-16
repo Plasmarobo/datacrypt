@@ -3,8 +3,14 @@ build
 *.o
 .vscode
 
+tools/**/debug
+tools/**/target
+tools/**/Cargo.lock
 tools/rpc/debug
 tools/rpc/target
 tools/rpc/Cargo.lock
 **/*.rs.bak
 **/*.pdb
+**/*.bin
+**/*.code-workspace
+**/*.log

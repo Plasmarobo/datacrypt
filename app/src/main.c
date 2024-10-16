@@ -14,6 +14,7 @@ int main() {
     scheduler_init();
     adc_init(NULL);
     random_init();
+    serial_init();
     leds_init();
     display_init(game_init);
     flash_init(filesystem_init);

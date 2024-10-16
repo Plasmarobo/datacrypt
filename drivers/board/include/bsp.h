@@ -68,6 +68,8 @@ extern gpio_t ANALOG_RNG;
 #define TIMER_OFFSET (12)
 #define TIMER_LENGTH (6)
 
+#define STATUS_SUCCESS (0)
+
 typedef struct {
     uint8_t r;
     uint8_t g;
@@ -131,8 +133,18 @@ void gpio_set_callback(gpio_t gpio, callback_t on_change);
 void gpio_change_handler(gpio_t gpio);
 
 // ========== Serial Comm ==========
+
+#define SERIAL_USER_ABORT (-2)
+#define SERIAL_HW_ERROR (-1)
+
+void serial_init(void);
+void serial_flush_rx(void);
+length_t serial_available_bytes(void);
 void serial_read(buffer_t dest, length_t length, callback_t oncomplete);
 void serial_write(const buffer_t data, length_t length, callback_t oncomplete);
+void serial_abort_tx(void);
+void serial_abort_rx(void);
+void serial_abort_rx_notify(callback_t oncomplete);
 void serial_printhex(const buffer_t data, length_t length,
                      callback_t oncomplete);
 void serial_print(const char *str);
@@ -140,7 +152,8 @@ void serial_printf(const char *fmt, ...);
 void vserial_printf(const char *fmt, va_list args);
 void serial_tx_complete_handler(int32_t status);
 void serial_rx_complete_handler(int32_t status);
-void serial_abort_handler(int32_t status);
+void serial_rx_abort_handler(int32_t status);
+void serial_tx_abort_handler(int32_t status);
 
 // ========== Pseudo RNG ==========
 void random_init();

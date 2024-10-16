@@ -9,7 +9,8 @@
 			"stdint.h": "c",
 			"defs.h": "c",
 			"scheduler.h": "c",
-			"debug.h": "c"
+			"debug.h": "c",
+			"bsp.h": "c"
 		},
 		"cortex-debug.variableUseNaturalFormat": false
 	}

@@ -20,14 +20,18 @@
 #define RPC_STATUS_BUSY (1)
 #define RPC_STATUS_ERR_EXEC (2)
 #define RPC_STATUS_ERR_ARG (3)
+#define RPC_STATUS_ERR_TIMEOUT (4)
 
 #define RPC_TIMEOUT_MS (500)
 
-typedef enum {
+enum rpc_states {
     RPC_READ_COMMAND,
     RPC_READ_DATA,
     RPC_EXEC,
-} rpc_state_t;
+    RPC_TIMEOUT,
+};
+
+typedef uint8_t rpc_state_t;
 
 typedef struct __attribute__((packed)) {
     char code;

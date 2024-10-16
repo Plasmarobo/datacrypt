@@ -5,11 +5,11 @@
 
 #include "defs.h"
 
-#define MAX_TASKS (64)
+#define MAX_TASKS (48)
 #define EXEC_DEPTH_LIMIT (4)
 
-static timespan_t last_tick;
-static uint8_t exec_depth;
+static volatile timespan_t last_tick;
+static volatile uint8_t exec_depth;
 static task_data_t tasks[MAX_TASKS];
 static volatile callback_t future_waiting;
 static volatile int32_t future_status;
@@ -28,6 +28,7 @@ static task_data_t* get_free_task() {
 task_handle_t task_immediate(callback_t handler) {
     return task_immediate_signal(handler, 0);
 }
+
 task_handle_t task_immediate_signal(callback_t handler, int32_t status) {
     enter_critical();
     task_data_t* slot = get_free_task();
@@ -168,7 +169,7 @@ void scheduler_init() {
     future_waiting = NULL;
 }
 
-void scheduler_exec() {
+void __attribute__((optimize("O0"))) scheduler_exec() {
     exec_depth++;
     if (exec_depth < EXEC_DEPTH_LIMIT) {
         timespan_t delta = 0;
@@ -181,8 +182,14 @@ void scheduler_exec() {
         }
         // Minimum time slice is 1us
         last_tick = now;
-        for (uint8_t i = 0; i < MAX_TASKS; ++i) {
-            if ((TASK_DISABLED >= tasks[i].type) || !tasks[i].handler) {
+        for (volatile uint8_t i = 0; i < MAX_TASKS; ++i) {
+            callback_t handler = NULL;
+            int32_t status = 0;
+            if (TASK_DISABLED >= tasks[i].type) {
+                continue;
+            }
+            if (!tasks[i].handler) {
+                tasks[i].type = TASK_PENDING_FREE;
                 continue;
             }
             tasks[i].elapsed += delta;
@@ -190,20 +197,23 @@ void scheduler_exec() {
                 case TASK_IMMEDIATE:
                     // Invoke and free the task
                     tasks[i].type = TASK_PENDING_FREE;
-                    tasks[i].handler(tasks[i].status);
+                    handler = tasks[i].handler;
+                    status = tasks[i].status;
                     break;
                 case TASK_DELAYED:
                     if (tasks[i].elapsed >= tasks[i].time) {
                         // Invoke and free the task
                         tasks[i].type = TASK_PENDING_FREE;
-                        tasks[i].handler(tasks[i].status);
+                        handler = tasks[i].handler;
+                        status = tasks[i].status;
                     }
                     break;
                 case TASK_PERIODIC:
                     if (tasks[i].elapsed >= tasks[i].time) {
                         // Invoke, but do not free
+                        handler = tasks[i].handler;
+                        status = tasks[i].status;
                         tasks[i].elapsed = 0;
-                        tasks[i].handler(tasks[i].status);
                     }
                     break;
                 case TASK_DISABLED:      // intentional fallthrough
@@ -212,6 +222,9 @@ void scheduler_exec() {
                 default:
                     break;
             }
+            if (handler != NULL) {
+                handler(status);
+            }
         }
     }
     exec_depth--;
@@ -219,6 +232,10 @@ void scheduler_exec() {
     for (uint8_t i = 0; i < MAX_TASKS; ++i) {
         if (tasks[i].type == TASK_PENDING_FREE) {
             tasks[i].type = TASK_FREE;
+            tasks[i].handler = NULL;
+            tasks[i].elapsed = 0;
+            tasks[i].status = 0;
+            tasks[i].time = 0;
         }
     }
 }

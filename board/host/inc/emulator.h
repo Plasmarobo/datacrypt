@@ -3,7 +3,7 @@
 
 #include <stdint.h>
 
-#include <optional>
+#include <optional.h>
 #include <vector>
 
 namespace Emulator {
@@ -28,29 +28,20 @@ typedef struct {
     uint8_t b;
 } led_info_t;
 
-#define FLASH_MESSAGE_MAX 2048
-// SPI/Flash
-typedef struct {
-    uint16_t page_address;
-    uint16_t byte_address;
-    uint16_t length;
-    uint8_t packet[FLASH_MESSAGE_MAX];
-} flash_info_t;
-
 // Supports only 8 bit serial
 class SerialChannel {
    private:
     uint32_t baud;
     std::vector<uint8_t> rx;
     std::vector<uint8_t> tx;
-    std::optional<SerialChannel&> endpoint;
+    SerialChannel* endpoint;
 
    public:
     SerialChannel();
     std::optional<std::vector<uint8_t>> receive();
     void send(std::slice<uint8_t>);
-    void connect(SerialChannel& endpoint);
-}
+    void connect(SerialChannel* endpoint);
+};
 
 // I2C/Display
 
@@ -63,6 +54,9 @@ class SerialChannel {
 class Emulator {
    private:
     uint32_t gpio_bitfield[GPIO_PORT_MAX];
+
+   public:
+    void interrupt();
 
 }
 

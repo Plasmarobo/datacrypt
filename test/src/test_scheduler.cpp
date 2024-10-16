@@ -1,4 +1,6 @@
 #define CATCH_CONFIG_MAIN
+#define CACHE_CONFIG_FAST_COMPILE
+
 #include <catch_amalgamated.hpp>
 
 #include "scheduler.h"

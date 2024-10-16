@@ -21,7 +21,7 @@
 
 #include <stdarg.h>
 
-#include "stm32.h"
+#include "emulator.h"
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
@@ -752,22 +752,16 @@ void assert_failed(uint8_t* file, uint32_t line) {
 }
 #endif /* USE_FULL_ASSERT */
 
-/**
- * @brief This function handles TIM14 global interrupt.
- */
-void TIM14_IRQHandler(void) {
-    /* USER CODE BEGIN TIM14_IRQn 0 */
-
-    /* USER CODE END TIM14_IRQn 0 */
-    HAL_TIM_IRQHandler(&htim14);
-    /* USER CODE BEGIN TIM14_IRQn 1 */
-    // 0x10000 - 16 bit rollover
-    us_accumulator += 0x10000;
-
-    /* USER CODE END TIM14_IRQn 1 */
+timespan_t microseconds() {
+    struct timespec ts;
+    int status = timespec_get(&ts, TIME_UTC);
+    if (status) {
+        timespan_t us =
+            ((timespan_t)ts.tv_sec * 1000000) + ((timespan_t)ts.tv_nsec / 1000);
+        return us_accumulator | (us % 65535);
+    }
+    return 0;
 }
-
-timespan_t microseconds() { return us_accumulator | TIM14->CNT; }
 
 timespan_t milliseconds() { return microseconds() / 1000; }
 
@@ -798,10 +792,21 @@ static volatile bool serial_lock = false;
 
 void serial_read(buffer_t dest, length_t length, callback_t oncomplete) {
     serial_rxcomplete = oncomplete;
-    HAL_UART_Receive_IT(&huart1, dest, length);
+    __HAL_UART_CLEAR_FLAG(&huart1, UART_CLEAR_OREF);
+    if (HAL_UART_Receive_IT(&huart1, dest, length) != HAL_OK)
+    {
+        Error_Handler();
+    }
 }
 
-#define SERIAL_TIMEOUT_US (100000)
+void serial_abort_tx(void) { HAL_UART_AbortTransmit_IT(&huart1); }
+void serial_abort_rx(void) { HAL_UART_AbortReceive_IT(&huart1); }
+void serial_abort_rx_notify(callback_t oncomplete) {
+    serial_rxcomplete = oncomplete;
+    if (HAL_UART_R)
+}
+
+#define SERIAL_TIMEOUT_US (1000000)
 #define MAX_SERIAL_PACKET (256)
 static uint8_t serial_buffer[MAX_SERIAL_PACKET];
 

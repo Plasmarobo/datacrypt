@@ -8,6 +8,7 @@
 
 #define DEBUG_DISPLAY (0)
 
+#if defined(DEBUG_PRINT)
 void dbgprintf(const char* fmt, ...) {
     va_list args;
     va_start(args, fmt);
@@ -16,3 +17,7 @@ void dbgprintf(const char* fmt, ...) {
 }
 
 void dbgprint(const char* str) { serial_print(str); }
+#else
+void dbgprintf(const char* fmt, ...){}
+void dbgprint(const char* str) {}
+#endif
