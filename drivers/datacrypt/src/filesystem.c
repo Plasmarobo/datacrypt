@@ -31,6 +31,7 @@ typedef uint32_t bbt_t;
 // Bit shift should match log2(sizeof(bbt_t))
 static bbt_t bad_block_table[BBT_DWORDS];
 static file_t current_file;
+static callback_t on_ready;
 
 #define BLOCK_SIZE (PAGES_PER_BLOCK * PAGE_SIZE)
 #define INVALID_ADDRESS (0xFFFFFFFF)
@@ -141,6 +142,10 @@ static void bbt_init(int32_t status) {
             } else {
                 dbgprintf("BBT Saved\r\n");
             }
+            if (on_ready != NULL) {
+                on_ready(0);
+                on_ready = NULL;
+            }
             return;
         } else if (BBT_MAGIC == buf) {
             // We have found our pattern, read in the bbt
@@ -148,6 +153,11 @@ static void bbt_init(int32_t status) {
                 flash_read(PAGE_ADDRESS(0, 0), sizeof(bbt_t), &bad_block_table,
                            sizeof(bad_block_table), future),
                 MILLIS(FILESYSTEM_TIMEOUT_MS));
+            if (on_ready != NULL)
+            {
+                on_ready(0);
+                on_ready = NULL;
+            }
             return;
         } else if (0 == buf) {
             // Flash has been written down, keep looking
@@ -210,7 +220,12 @@ static int32_t calculate_flash_address(uint32_t flat_address,
     return (PAGE_PITCH - (*byte_index));
 }
 
-void filesystem_init(int32_t status) {
+void filesystem_init(callback_t notify)
+{
+    on_ready = notify;
+}
+
+void filesystem_start(int32_t status) {
     current_file.block_offset = 0;
     current_file.byte_offset = 0;
     current_file.maximum_rw = 0;

@@ -28,7 +28,8 @@
 #define WORDS_DB ("/words.db")
 #define AUDIO_DB ("/audio.db")
 
-void filesystem_init(int32_t status);
+void filesystem_start(int32_t status);
+void filesystem_init(callback_t notify);
 void file_open(const char* path);
 
 size_t file_read(buffer_t dest, size_t size);

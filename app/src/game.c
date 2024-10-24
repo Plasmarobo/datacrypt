@@ -6,12 +6,19 @@
 
 #include "bsp.h"
 #include "scheduler.h"
+#include "words.h"
+#include "images.h"
 
 #define LED_PERIOD_MS (33)
 #define DISPLAY_PERIOD_MS (33)
 #define INPUT_PERIOD_MS (100)
 
 #define TEAM_COUNT (2)
+
+const char* MENU_NAME_TXT = "Menu";
+const char* NEW_GAME_TXT = "New Game";
+const char* CONTINUE_TXT = "Continue";
+const char* GAME_INSTRUCTION_TXT = "Flip switch\npress SELECT";
 
 static uint8_t current_team;
 static uint8_t opposing_team;
@@ -67,18 +74,14 @@ static color_t blend(color_t a, color_t b, uint8_t factor) {
     out.b = blend_channel(a.b, b.b, factor);
     return out;
 }
-static callback_t on_blank = NULL;
-static void blank_displays(int32_t status) {
-    static uint8_t display_to_blank = 0;
-    if (display_to_blank < DISPLAY_MAX) {
-        display_clear();
-        display_show(display_to_blank, blank_displays);
-        ++display_to_blank;
-    } else {
-        display_to_blank = 0;
-        if (NULL != on_blank) {
-            on_blank(0);
-        }
+
+static void blank_displays(void) {
+    future_t future;
+    int32_t status;
+    display_clear();
+    for(uint8_t i = 0; i < DISPLAY_MAX; ++i)
+    {
+        WITH_FUTURE(display_show(i, future), DISPLAY_PERIOD_MS);
     }
 }
 
@@ -181,21 +184,44 @@ static void start_animation(callback_t cb, timespan_t duration_ms) {
     anim_callback = cb;
     anim_duration_ms = duration_ms;
     anim_value_ms = 0;
-    on_blank = anim_handler;
-    blank_displays(0);
+    blank_displays();
+    anim_handler(0);
 }
 
 static void led_handler() { leds_write(); }
 
-static void game_handler(int32_t status) {
+static void game_handler(int32_t _status) {
+    future_t future;
+    int32_t status;
     switch (gs) {
         case SPLASH:
+            display_blit(0, 0, img_millibyte_alt_cropped, 128, 32);
+            for(uint8_t i = 0; i < DISPLAY_MAX; ++i)
+            {
+                WITH_FUTURE(display_show(i, future), DISPLAY_PERIOD_MS);
+            }
+            gs = MAIN_MENU;
+            task_delayed(game_handler, 2000);
             break;
         case MAIN_MENU:
+            blank_displays();
+            status = 0xFFFFFFFF;
+            display_set_text(1,1, MENU_NAME_TXT, strlen(MENU_NAME_TXT));
+            WITH_FUTURE(display_show(0, future), DISPLAY_PERIOD_MS);
+            display_set_text(1,1, NEW_GAME_TXT, strlen(NEW_GAME_TXT));
+            WITH_FUTURE(display_show(1, future), DISPLAY_PERIOD_MS);
+            display_set_text(1,1, CONTINUE_TXT, strlen(CONTINUE_TXT));
+            WITH_FUTURE(display_show(2, future), DISPLAY_PERIOD_MS);
+            display_set_text(1,1, GAME_INSTRUCTION_TXT, strlen(GAME_INSTRUCTION_TXT));
+            WITH_FUTURE(display_show(4, future), DISPLAY_PERIOD_MS);
             break;
-        case WORD_SELECT:
+        case WORD_SELECT_A:
             break;
-        case PASS_DEVICE:
+        case WORD_SELECT_B:
+            break;
+        case PASS_DEVICE_A:
+            break;
+        case PASS_DEVICE_B:
             break;
         case SEQUENCE_PHASE:
             break;
@@ -218,7 +244,8 @@ static void game_handler(int32_t status) {
 void game_init(int32_t status) {
     current_team = TEAM_A;
     opposing_team = TEAM_B;
-    gs = SCORE_PHASE;
+    gs = SPLASH;
+    words_init();
     task_delayed(game_handler, MILLIS(2000));
     task_periodic(led_handler, MILLIS(LED_PERIOD_MS));
 }

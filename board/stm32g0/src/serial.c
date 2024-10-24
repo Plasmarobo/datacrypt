@@ -49,26 +49,36 @@ void serial_flush_rx(void)
     serial_read_ptr = serial_write_ptr;
 }
 
+static void serial_deque(uint8_t* dest, uint32_t length)
+{
+    memcpy(dest, serial_read_ptr, length);
+    serial_read_ptr += length;
+    if (serial_read_ptr >= (serial_rx_buffer + MAX_SERIAL_PACKET)) { serial_read_ptr = serial_rx_buffer; }
+}
+
 static void serial_rx_audit(int32_t status)
 {
     length_t bytes_in_buffer = serial_available_bytes();
     if (serial_rxcomplete && serial_dest && notify_length && (bytes_in_buffer >= notify_length))
     {
-        memcpy(serial_dest, serial_read_ptr, notify_length);
-        serial_read_ptr += notify_length;
-        if (serial_read_ptr >= (serial_rx_buffer + MAX_SERIAL_PACKET)) { serial_read_ptr = serial_rx_buffer; }
-        serial_dest = NULL;
+        serial_deque(serial_dest, notify_length);
         task_immediate_signal(serial_rxcomplete, status);
+        serial_dest = NULL;
         serial_rxcomplete = NULL;
         notify_length = 0;
     }
 }
 
 void serial_read(buffer_t dest, length_t length, callback_t oncomplete) {
-    serial_rxcomplete = oncomplete;
-    notify_length = length;
-    serial_dest = dest;
-    task_immediate_unique(serial_rx_audit);
+    if (serial_available_bytes() >= length)
+    {
+        serial_deque(dest, length);
+        oncomplete(length);
+    } else {
+        serial_rxcomplete = oncomplete;
+        notify_length = length;
+        serial_dest = dest;
+    }
 }
 
 void serial_write(const buffer_t data, length_t length, callback_t oncomplete) {

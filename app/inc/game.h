@@ -31,14 +31,21 @@ typedef struct {
 typedef enum {
     SPLASH,
     MAIN_MENU,
+    // Main Menu:
     NEW_GAME,
-    WORD_SELECT,     // Team A & B
-    PASS_DEVICE,     // Hide toggle should be set
-    SEQUENCE_PHASE,  // Show the sequence
-    START_PHASE,     // Hide toggle unset
+    CONTINUE_GAME,
+    // New Game
+    WORD_SELECT_A,     // Team A - Lock in 4 words, flip PASS toggle
+    PASS_DEVICE_A,      
+    WORD_SELECT_B,     // Team B - Lock in 4 words, flip PASS toggle
+    PASS_DEVICE_B,
+    SEQUENCE_PHASE,  // Unhide, Show the sequence
+    START_PHASE,     // Start the timer
     TIME_PHASE,      // Timer set, end on timer reset or timer expire
-    SCORE_PHASE,     // Enter Fail/Intercept, Success, then press end turn
-    GAME_OVER,       // The win state
+    SCORE_PHASE,     // Enter Miscommunicate, Intercept, Success
+    CONFIRM_SCORE_PHASE, // Confirm user input, then PASS
+    GAME_CHECK_PHASE, // Check if the game has been Won or Lost
+    GAME_OVER,       // The win state - display stats, press continue
 } game_state_t;
 
 void game_init(int32_t status);

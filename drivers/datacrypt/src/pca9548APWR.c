@@ -13,6 +13,7 @@ typedef enum {
     MUX_BUSY,
 } mux_state_t;
 
+static uint8_t retries = 0;
 static uint8_t control_register = 0;
 static uint8_t selected_display = 0;
 static callback_t complete_handler = NULL;
@@ -20,20 +21,34 @@ static callback_t complete_handler = NULL;
 static void write_reg(int32_t status);
 
 static void mux_settle_handler(int32_t result) {
-    selected_display = control_register;
+    if (0 == result)
+    {
+        selected_display = control_register;
+    }
+    else
+    {
+        selected_display = DISPLAY_MAX;
+    }
     if (complete_handler != NULL) {
-        complete_handler(selected_display);
+        complete_handler(result);
         complete_handler = NULL;
     }
 }
 
 static void display_selected_handler(int32_t result) {
-    if (result != I2C_SUCCESS) {
+    if (result != I2C_SUCCESS && retries <= 0) {
         // Error! Try again
-        task_delayed(write_reg, MICROS(MUX_SETTLE_US));
+        --retries;
+        if (NULL == task_delayed(write_reg, MICROS(MUX_SETTLE_US)))
+        {
+            mux_settle_handler(-1);
+        }
         return;
     }
-    task_delayed(mux_settle_handler, MICROS(MUX_SETTLE_US));
+    else
+    {
+        task_delayed_signal(mux_settle_handler, MICROS(MUX_SETTLE_US), result);
+    }
 }
 
 static void write_reg(int32_t status) {
@@ -46,6 +61,7 @@ void display_mux_enable() { gpio_set(MUXRST, true); }
 
 void display_select(uint8_t index, callback_t oncomplete) {
     // Set control register to index
+    retries = 3;
     complete_handler = oncomplete;
     if (index > 0x80) {
         control_register = 0;

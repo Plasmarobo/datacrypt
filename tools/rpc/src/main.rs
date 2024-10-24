@@ -504,7 +504,7 @@ impl WordBuffer {
 
     pub fn add_word(&mut self, word: String) {
         self.write_buffer.extend(word.trim().as_bytes());
-        let remaining_length: usize = WordBuffer::WORDLIST_PITCH - word.len();
+        let remaining_length: usize = WordBuffer::WORDLIST_PITCH - word.len() - if self.page_idx == 1 { 4 } else { 0 };
         if remaining_length > 0 {
             self.write_buffer.extend(vec![0; remaining_length]);
         }
@@ -607,12 +607,8 @@ fn main() {
         dev_path,
     )))));
     dump_flash(rpc.clone());
-    {
-        //dump_factory_bbt(rpc.clone());
-    }
-    {
-        //load_wordlist(rpc.clone());
-    }
+    //dump_factory_bbt(rpc.clone());
+    //load_wordlist(rpc.clone());
 
     loop {
         println!("Enter command");
@@ -621,7 +617,7 @@ fn main() {
                 match rpc.borrow_mut().read_flash(address, size)
                 {
                     Ok(data) => {
-                        println!("Read {} bytes from {}", address, size);
+                        println!("Read {} bytes from {}", size, address);
                         for byte in data
                         {
                             print!("{:#04?} ", byte);
@@ -647,7 +643,7 @@ fn main() {
                     Err(e) => println!("Got status {}", e),
                 }
             },
-            ("eraseflash", " ", let address: u32, " ", let _: u8) => {
+            ("eraseflash", " ", let address: u32) => {
                 match rpc.borrow_mut().erase_flash(address)
                 {
                     Ok(()) => println!("Erased block at {}", address),

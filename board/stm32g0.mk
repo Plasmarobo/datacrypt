@@ -25,7 +25,13 @@ AS_DEFS =
 # C defines
 C_DEFS =  \
 -DUSE_HAL_DRIVER \
--DSTM32G030xx
+-DSTM32G030xx 
+
+ifeq ($(DEBUG_PRINT), 1)
+C_DEFS += -DDEBUG_PRINT
+else
+C_DEFS += -DRPC
+endif
 
 #######################################
 # CFLAGS

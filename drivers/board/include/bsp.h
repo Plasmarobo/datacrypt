@@ -111,7 +111,7 @@ void audio_shutdown(bool shutdown);
 #define DISP7_INDEX (0x40)
 #define DISPLAY_MAX (8)
 
-void display_init();
+void display_init(void);
 void display_mux_enable();
 void display_select(uint8_t index, callback_t on_complete);
 uint8_t display_get_selected();

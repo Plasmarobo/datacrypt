@@ -8,6 +8,7 @@
 #include "i2c.h"
 #include "images.h"
 #include "ringbuffer.h"
+#include "stack.h"
 #include "scheduler.h"
 
 // Eight bit address 0111 10--,  bit 1 is data/cmd, bit 0 is r/w
@@ -74,6 +75,7 @@
 #define MUX_ENABLE_DELAY_MS (100)
 #define DISPLAY_TASK_PERIOD_MS (100)
 #define DISPLAY_STATE_STACK_DEPTH (8)
+#define DISPLAY_USER_CALLBACK_DEPTH (4)
 #define DISPLAY_COMMAND_BUFFER_DEPTH (33)
 // Extra byte to auto-increment mem
 #define DISPLAY_FRAMEBUFFER_DEPTH ((128 / 8) * 64)
@@ -81,17 +83,21 @@
 #define FB_LOCKED (0x01)
 #define HW_LOCKED (0x02)
 
+#define DISPLAY_RETRY_DELAY_MS (1)
+#define DISPLAY_TIMEOUT_MS (200)
+#define DISPLAY_DEFAULT_RETRIES (3)
+
 static uint8_t data_buffer[1 + DISPLAY_FRAMEBUFFER_DEPTH];
 static uint8_t* const framebuffer = data_buffer + 1;
 static uint8_t command_buffer[DISPLAY_COMMAND_BUFFER_DEPTH];
 
 static uint8_t selected_display;
 static uint8_t display_pages;
-static callback_t user_callback = NULL;
-static callback_t callback_cache;
 static state_t* current_state;
+static uint32_t retries = 0;
+static callback_t user_callback;
 
-static void display_page(callback_t oncomplete);
+static void display_data(callback_t oncomplete);
 static void display_command(length_t arg_len, callback_t oncomplete);
 static void next_state(int32_t status);
 static void update_state(int32_t status);
@@ -100,45 +106,8 @@ static void draw_pixel(uint16_t x, uint16_t y, uint8_t value);
 static void draw_rect(uint16_t x, uint16_t y, uint16_t w, uint16_t h);
 static uint8_t get_height() { return ((selected_display % 2) == 0) ? 64 : 32; }
 
-DECLARESTATE(dfsm, idle);
-DECLARESTATE(dfsm, init);
-DECLARESTATE(dfsm, setup);
-DECLARESTATE(dfsm, write_display);
-
-// clang-format off
-RINGBUFFER(state_queue, state_t*, DISPLAY_STATE_STACK_DEPTH);
-
-static void init_next(int32_t status)
+static void display_setup(callback_t on_complete)
 {
-    QUEUESTATE(dfsm, init);
-    next_state(0);
-}
-
-STATE_ENTER(dfsm, init)
-{
-    if (selected_display < DISPLAY_MAX)
-    {
-        user_callback = init_next;
-        QUEUESTATE(dfsm, setup);
-        display_select(selected_display, next_state);
-    }
-    else
-    {
-        if (callback_cache != NULL)
-        {
-            user_callback = callback_cache;
-        }
-        else
-        {
-            user_callback = NULL;
-        }
-        next_state(0);
-    }
-};
-STATE(dfsm,init,enter);
-
-STATE_ENTER(dfsm,setup)
-{   
     uint8_t *cmd_ptr = command_buffer + 1;
     *cmd_ptr = CMD_SLEEP;
     ++cmd_ptr; *cmd_ptr = CMD_MULTIPLEX_RATIO;
@@ -171,59 +140,80 @@ STATE_ENTER(dfsm,setup)
     ++cmd_ptr; *cmd_ptr = CMD_ENABLE_CHARGE_PUMP;
     ++cmd_ptr; *cmd_ptr = 0x14;
     ++cmd_ptr; *cmd_ptr = CMD_WAKE;
-    QUEUESTATE(dfsm, write_display);
-    display_command(32, next_state);
+    display_command(32, on_complete);
 };
-STATE(dfsm,setup,enter);
-STATE_ENTER(dfsm, write_display)
+
+static void display_write_handler(int32_t status)
 {
-    display_page(update_state);
-};
-STATE_UPDATE(dfsm, write_display)
-{
-    selected_display += 1;
-    task_immediate(next_state);
-}
-STATE(dfsm, write_display, enter, update);
-STATE_ENTER(dfsm, idle) {
-    if (NULL != user_callback)
+    if (user_callback != NULL)
     {
-        user_callback(0);
-    }
-};
-STATE(dfsm, idle, enter);
-// clang-format on
-
-// Execute the current state without popping anything off the stack
-static void next_state(int32_t status) {
-    if (ringbuffer_empty(&state_queue)) {
-        fsm_set_state(NULL, STATEREF(dfsm, idle));
-        current_state = STATEREF(dfsm, idle);
-    } else {
-        state_t* new_state = NULL;
-        ringbuffer_pop(&state_queue, &new_state);
-        fsm_set_state(current_state, new_state);
-        current_state = new_state;
+        user_callback(status);
+        user_callback = NULL;
     }
 }
 
-static void update_state(int32_t status) { fsm_update(current_state); }
+static void display_write(int32_t status)
+{
+    if (0 == status)
+    {
+        display_data(display_write_handler);
+    }
+    else
+    {
+        dbgprintf("Unable to setup write: %d", status);
+    }
+}
+
+static void display_setup_write(int32_t status)
+{
+    if (0 == status)
+    {
+        command_buffer[1] = CMD_SET_PAGE;
+        command_buffer[2] = 0;
+        command_buffer[3] = 0xFF;
+        command_buffer[4] = CMD_SET_COLUMN;
+        command_buffer[5] = 0;
+        command_buffer[6] = 127;
+        display_command(7, display_write);
+    }
+    else
+    {
+        dbgprintf("Unable to select display %d: %d", selected_display, status);
+    }
+}
 
 uint8_t test_image[8] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
 
-void display_init(callback_t on_init) {
+void display_init(void) {
     // Copy bootmsg into framebuffer
-    user_callback = on_init;
-    callback_cache = on_init;
     selected_display = 0;
     display_pages = 0;
     current_state = NULL;
+    user_callback = NULL;
     display_mux_enable();
     display_clear();
     memset(framebuffer, 0xFF, 128);
     display_blit(0, 0, img_millibyte_alt_cropped, 128, 32);
-    QUEUESTATE(dfsm, init);
-    task_delayed(next_state, MILLIS(MUX_ENABLE_DELAY_MS));
+    future_t future;
+    int32_t status;
+    for(uint8_t i = 0; i < DISPLAY_MAX; ++i)
+    {
+        WITH_FUTURE(display_select(i, future), MILLIS(DISPLAY_TIMEOUT_MS));
+        if (status != 0)
+        {
+            dbgprintf("Failed selecting display %d", i);
+        }
+        WITH_FUTURE(display_setup(future), MILLIS(DISPLAY_TIMEOUT_MS));
+        if (status != 0)
+        {
+            dbgprintf("Failed setting up display %d", i);
+        }
+        WITH_FUTURE(display_show(i, future), MILLIS(DISPLAY_TIMEOUT_MS));
+        if (status != 0)
+        {
+            dbgprintf("Failed showing display %d", i);
+        }
+    }
 }
 
 static struct {
@@ -261,7 +251,7 @@ static void display_command(length_t data_size, callback_t on_complete) {
     start_transaction(command_buffer, data_size, on_complete);
 }
 
-static void display_page(callback_t on_complete) {
+static void display_data(callback_t on_complete) {
     data_buffer[0] = DATA_HEADER;
     start_transaction(data_buffer, DISPLAY_FRAMEBUFFER_DEPTH + 1, on_complete);
 }
@@ -305,9 +295,10 @@ void display_set_inverted(bool inv, callback_t oncomplete) {
 }
 
 void display_show(uint8_t display, callback_t oncomplete) {
+
+    retries = DISPLAY_DEFAULT_RETRIES;
     user_callback = oncomplete;
-    QUEUESTATE(dfsm, write_display);
-    display_select(display, next_state);
+    display_select(display, display_setup_write);
 }
 
 static void draw_pixel(uint16_t x, uint16_t y, uint8_t value) {

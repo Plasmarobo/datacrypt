@@ -3,6 +3,8 @@
 #include "bsp.h"
 #include "scheduler.h"
 
+#ifdef RPC
+
 #define RPC_TIMEOUT_MS (5000)
 
 static rpc_state_t rpc_state;
@@ -39,18 +41,19 @@ static void rpc_finish(int32_t status) {
 static void rpc_timeout_handler(int32_t status) {
     serial_flush_rx();
     rpc_state = RPC_TIMEOUT;
-}
-
-static void rpc_continue(int32_t status) {
-    rpc_send_status(status);
-    if (rpc_timeout_task == NULL) {
-        task_delayed_unique(rpc_timeout_handler, MILLIS(RPC_TIMEOUT_MS));
-    }
+    rpc_timeout_task = NULL;
 }
 
 static void rpc_start_timeout(int32_t status) {
     rpc_timeout_task =
         task_delayed_unique(rpc_timeout_handler, MILLIS(RPC_TIMEOUT_MS));
+}
+
+static void rpc_continue(int32_t status) {
+    rpc_send_status(status);
+    if (rpc_timeout_task == NULL) {
+        rpc_start_timeout(0);
+    }
 }
 
 static int32_t rpc_do_command() {
@@ -94,6 +97,7 @@ static int32_t rpc_do_command() {
             rpc_finish(RPC_STATUS_ERR_ARG);
             break;
     }
+    return RPC_STATUS_OK;
 }
 
 static void rpc_exec(int32_t status) {
@@ -135,8 +139,11 @@ static void rpc_exec(int32_t status) {
         rpc_finish(RPC_STATUS_ERR_EXEC);
     }
 }
+#endif
 
 void rpc_init(void) {
+#ifdef RPC
     rpc_state = RPC_READ_COMMAND;
     serial_read((buffer_t)&rpc_buffer, sizeof(rpc_t), rpc_exec);
+#endif
 }

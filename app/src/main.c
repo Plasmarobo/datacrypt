@@ -16,8 +16,9 @@ int main() {
     random_init();
     serial_init();
     leds_init();
-    display_init(game_init);
-    flash_init(filesystem_init);
+    display_init();
+    filesystem_init(game_init);
+    flash_init(filesystem_start);
     rpc_init();
     dbgprint("\r\nBOOT Complete\r\n");
     scheduler_freerun();
