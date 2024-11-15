@@ -77,8 +77,11 @@
 #define DISPLAY_STATE_STACK_DEPTH (8)
 #define DISPLAY_USER_CALLBACK_DEPTH (4)
 #define DISPLAY_COMMAND_BUFFER_DEPTH (33)
+#define DISPLAY_HEIGHT (64)
+#define DISPLAY_WIDTH (128)
 // Extra byte to auto-increment mem
-#define DISPLAY_FRAMEBUFFER_DEPTH ((128 / 8) * 64)
+//#define DISPLAY_FRAMEBUFFER_DEPTH ((128 / 8) * 64)
+#define DISPLAY_FRAMEBUFFER_DEPTH (DISPLAY_WIDTH * ((DISPLAY_HEIGHT + 7) / 8))
 #define PAGE_WIDTH (128)
 #define FB_LOCKED (0x01)
 #define HW_LOCKED (0x02)
@@ -192,8 +195,6 @@ void display_init(void) {
     user_callback = NULL;
     display_mux_enable();
     display_clear();
-    memset(framebuffer, 0xFF, 128);
-    display_blit(0, 0, img_millibyte_alt_cropped, 128, 32);
     future_t future;
     int32_t status;
     for(uint8_t i = 0; i < DISPLAY_MAX; ++i)

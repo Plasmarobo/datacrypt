@@ -5,7 +5,7 @@
 
 #include "defs.h"
 
-#define MAX_TASKS (48)
+#define MAX_TASKS (32)
 #define EXEC_DEPTH_LIMIT (4)
 
 static volatile timespan_t last_tick;
@@ -14,6 +14,7 @@ static task_data_t tasks[MAX_TASKS];
 static volatile callback_t future_waiting;
 static volatile int32_t future_status;
 
+// Should be called in a cricital section
 static task_data_t* get_free_task() {
     for (uint8_t i = 0; i < MAX_TASKS; ++i) {
         if (TASK_FREE == tasks[i].type) {
@@ -24,23 +25,66 @@ static task_data_t* get_free_task() {
     return NULL;
 }
 
+// Should be called in a critical section
+static task_data_t* get_free_unique_task(callback_t handler)
+{
+    task_data_t* slot = NULL;
+    for (uint8_t i = 0; i < MAX_TASKS; ++i) {
+        if ((handler == tasks[i].handler) && (TASK_FREE != tasks[i].type)) {
+            // Overwrite
+            slot = &tasks[i];
+            break;
+        } else if ((NULL == slot) && (TASK_FREE == tasks[i].type)) {
+            slot = &tasks[i];
+        }
+    }
+   return slot;
+}
+
 // Schedules a task for execution on the next exec cycle
 task_handle_t task_immediate(callback_t handler) {
     return task_immediate_signal(handler, 0);
 }
 
-task_handle_t task_immediate_signal(callback_t handler, int32_t status) {
+task_handle_t emplace_task(task_type_t type, callback_t handler, int32_t status, timespan_t period) {
+    if (handler == NULL)
+    {
+        return NULL;
+    }
     enter_critical();
     task_data_t* slot = get_free_task();
     if (NULL != slot) {
         slot->handler = handler;
-        slot->time = 0;
-        slot->type = TASK_IMMEDIATE;
+        slot->time = period;
+        slot->type = type;
         slot->elapsed = 0;
         slot->status = status;
     }
     exit_critical();
     return slot;
+}
+
+task_handle_t emplace_unique_task(task_type_t type, callback_t handler, int32_t status, timespan_t period)
+{
+    if (handler == NULL)
+    {
+        return NULL;
+    }
+    enter_critical();
+    task_data_t* slot = get_free_unique_task(handler);
+    if (NULL != slot) {
+        slot->handler = handler;
+        slot->time = period;
+        slot->type = type;
+        slot->elapsed = 0;
+        slot->status = status;
+    }
+    exit_critical();
+    return slot;
+}
+
+task_handle_t task_immediate_signal(callback_t handler, int32_t status) {
+   return emplace_task(TASK_IMMEDIATE, handler, status, 0);
 }
 
 // Schedules a task for periodic execution
@@ -50,17 +94,7 @@ task_handle_t task_periodic(callback_t handler, timespan_t period) {
 
 task_handle_t task_periodic_signal(callback_t handler, timespan_t period,
                                    int32_t status) {
-    enter_critical();
-    task_data_t* slot = get_free_task();
-    if (NULL != slot) {
-        slot->handler = handler;
-        slot->time = period;
-        slot->type = TASK_PERIODIC;
-        slot->elapsed = 0;
-        slot->status = status;
-    }
-    exit_critical();
-    return slot;
+    return emplace_task(TASK_PERIODIC, handler, status, period);
 }
 
 // Schedules a task for execution in the future
@@ -70,42 +104,13 @@ task_handle_t task_delayed(callback_t handler, timespan_t delay) {
 
 task_handle_t task_delayed_signal(callback_t handler, timespan_t delay,
                                   int32_t status) {
-    enter_critical();
-    task_data_t* slot = get_free_task();
-    if (NULL != slot) {
-        slot->handler = handler;
-        slot->time = delay;
-        slot->type = TASK_DELAYED;
-        slot->elapsed = 0;
-        slot->status = status;
-    }
-    exit_critical();
-    return slot;
+    return emplace_task(TASK_DELAYED, handler, status, delay);
 }
 
 // Searches for existing handler, overwrites if found
 // If duplicates exist, only relpaces the first found
 task_handle_t task_immediate_unique(callback_t handler) {
-    enter_critical();
-    task_data_t* slot = NULL;
-    for (uint8_t i = 0; i < MAX_TASKS; ++i) {
-        if ((handler == tasks[i].handler) && (TASK_FREE != tasks[i].type)) {
-            // Overwrite
-            slot = &tasks[i];
-            break;
-        } else if ((NULL == slot) && (TASK_FREE == tasks[i].type)) {
-            slot = &tasks[i];
-        }
-    }
-    if (NULL != slot) {
-        slot->handler = handler;
-        slot->time = 0;
-        slot->type = TASK_IMMEDIATE;
-        slot->elapsed = 0;
-        slot->status = 0;
-    }
-    exit_critical();
-    return slot;
+    return emplace_unique_task(TASK_IMMEDIATE, handler, 0, 0);
 }
 
 task_handle_t task_delayed_unique(callback_t handler, timespan_t delay) {
@@ -114,26 +119,7 @@ task_handle_t task_delayed_unique(callback_t handler, timespan_t delay) {
 
 task_handle_t task_delayed_unique_signal(callback_t handler, timespan_t delay,
                                          int32_t status) {
-    enter_critical();
-    task_data_t* slot = NULL;
-    for (uint8_t i = 0; i < MAX_TASKS; ++i) {
-        if ((handler == tasks[i].handler) && (TASK_FREE != tasks[i].type)) {
-            // Overwrite
-            slot = &tasks[i];
-            break;
-        } else if ((NULL == slot) && (TASK_FREE == tasks[i].type)) {
-            slot = &tasks[i];
-        }
-    }
-    if (NULL != slot) {
-        slot->handler = handler;
-        slot->time = delay;
-        slot->type = TASK_DELAYED;
-        slot->elapsed = 0;
-        slot->status = status;
-    }
-    exit_critical();
-    return slot;
+    return emplace_unique_task(TASK_DELAYED, handler, status, delay);
 }
 
 void task_signal(task_handle_t task, int32_t status) {
@@ -183,8 +169,8 @@ void __attribute__((optimize("O0"))) scheduler_exec() {
         // Minimum time slice is 1us
         last_tick = now;
         for (volatile uint8_t i = 0; i < MAX_TASKS; ++i) {
-            callback_t handler = NULL;
-            int32_t status = 0;
+            volatile callback_t handler = NULL;
+            volatile int32_t status = 0;
             if (TASK_DISABLED >= tasks[i].type) {
                 continue;
             }
@@ -231,11 +217,11 @@ void __attribute__((optimize("O0"))) scheduler_exec() {
     // Free pending tasks
     for (uint8_t i = 0; i < MAX_TASKS; ++i) {
         if (tasks[i].type == TASK_PENDING_FREE) {
-            tasks[i].type = TASK_FREE;
             tasks[i].handler = NULL;
             tasks[i].elapsed = 0;
             tasks[i].status = 0;
             tasks[i].time = 0;
+            tasks[i].type = TASK_FREE;
         }
     }
 }

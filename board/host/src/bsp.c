@@ -877,11 +877,11 @@ void vserial_printf(const char* fmt, va_list args) {
 
 void serial_tx_complete_handler(int32_t status) {
     // Should run in interrupt context
-    serial_lock = false;
     if (NULL != serial_txcomplete) {
         task_immediate_signal(serial_txcomplete, status);
         serial_txcomplete = NULL;
     }
+    serial_lock = false;
 }
 void serial_rx_complete_handler(int32_t status) {
     // Should run in interrupt context
@@ -892,11 +892,11 @@ void serial_rx_complete_handler(int32_t status) {
 }
 
 void serial_abort_handler(int32_t status) {
-    serial_lock = false;
     if (NULL != serial_txcomplete) {
         task_immediate_signal(serial_txcomplete, status);
         serial_txcomplete = NULL;
     }
+    serial_lock = false;
     if (NULL != serial_rxcomplete) {
         task_immediate_signal(serial_rxcomplete, status);
         serial_rxcomplete = NULL;

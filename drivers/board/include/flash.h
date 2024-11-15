@@ -13,23 +13,31 @@
 #define FLASH_ERR_CACHE_OVERWRITE (-8)
 #define FLASH_ERR_UNKNOWN_ID (-9)
 
+// Upper 11 bits
+#define PAGE_MASK (0x3F)
+#define BLOCK_MASK (0xFFC0)
+// Lower 11 bits
+#define BYTE_MASK (0x7FF)
+
+#define BLOCK(addr) (addr >> 17)
+#define PAGE(addr) ((addr >> 11) & PAGE_MASK)
+#define BLOCK_PAGE(addr) (FLASH_PAGE_ADDR(BLOCK(addr), PAGE(addr)))
+#define BYTE(addr) (addr & BYTE_MASK)
+
+#define FLASH_PAGE_ADDR(block, page) (((block << 6) & BLOCK_MASK) | (page & PAGE_MASK))
+#define FLASH_BYTE_OFFSET(offset) (offset & BYTE_MASK)
+#define FLASH_ADDRESS(block, page, offset) ((FLASH_PAGE_ADDR(block, page) << 11) | FLASH_BYTE_OFFSET(offset))
+
+#define ERASED_VALUE (0xFF)
+#define BAD_BLOCK_VALUE (0x18)
+
+#define OOB_BASE_ADDRESS (PAGE_SIZE)
+
+#define BLOCK_SIZE (2048 * 64)
 #define PAGE_SIZE (2048)
 #define BLOCK_COUNT (1024)
 #define PAGES_PER_BLOCK (64)
 #define OOB_SIZE (64)
-
-#define PAGE_MASK (0x3F)
-#define BLOCK_MASK (0xFFC0)
-#define BLOCK(x) ((x & BLOCK_MASK) >> 6)
-#define PAGE(x) (x & PAGE_MASK)
-
-#define ERASED_VALUE (0xFF)
-#define BAD_BLOCK_VALUE (0x18)
-#define PAGE_ADDRESS(block, page) \
-    (((block << 6) & BLOCK_MASK) | (page & PAGE_MASK))
-#define PAGE_OFFSET(offset) (offset / PAGE_SIZE)
-
-#define OOB_BASE_ADDRESS (PAGE_SIZE)
 
 typedef enum {
     FLASH_EV_IDLE,
@@ -38,14 +46,14 @@ typedef enum {
     FLASH_EV_MAX,
 } flash_event_t;
 
-typedef uint16_t flash_page_address_t;
+typedef uint32_t flash_address_t;
 
 void flash_init(callback_t on_init);
-void flash_read(flash_page_address_t bp_addr, uint16_t byte_address_,
+void flash_read(flash_address_t address,
                 buffer_t dest, length_t size, callback_t on_complete);
-void flash_write(flash_page_address_t page, uint16_t byte_address_,
+void flash_write(flash_address_t address,
                  buffer_t data, length_t size, callback_t on_complete);
-void flash_update(flash_page_address_t page, uint16_t byte_address_,
+void flash_update(flash_address_t address,
                   buffer_t data, length_t size, callback_t on_complete);
 void flash_commit(callback_t on_complete);
 void flash_erase(uint32_t addr, callback_t on_complete);

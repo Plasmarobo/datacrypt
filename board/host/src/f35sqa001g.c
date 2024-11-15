@@ -536,7 +536,7 @@ static bool lock_flash(callback_t notify) {
     return true;
 }
 
-void flash_read(flash_page_address_t bp_addr, uint16_t byte_address_,
+void flash_read(flash_address_t address,
                 buffer_t dest, length_t size, callback_t on_complete) {
     if (lock_flash(on_complete)) {
         byte_address = byte_address_;
@@ -549,7 +549,7 @@ void flash_read(flash_page_address_t bp_addr, uint16_t byte_address_,
 }
 
 // Setup a write with program data, will clear cache to 0xFF
-void flash_write(flash_page_address_t page, uint16_t byte_address_,
+void flash_write(flash_address_t address,
                  buffer_t data, length_t size, callback_t on_complete) {
     if (lock_flash(on_complete)) {
         block_page_address = page;
@@ -559,7 +559,7 @@ void flash_write(flash_page_address_t page, uint16_t byte_address_,
 
 // Setup a write with program data, random access, will not alter other cache
 // bytes
-void flash_update(flash_page_address_t page, uint16_t byte_address_,
+void flash_update(flash_address_t address,
                   buffer_t data, length_t size, callback_t on_complete) {
     if (lock_flash(on_complete)) {
         block_page_address = page;

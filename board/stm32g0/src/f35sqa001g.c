@@ -78,6 +78,10 @@
 
 #define INVALID_ADDRESS (0xFFFFFFFF)
 
+#define PAGE_MASK (0x3F)
+#define BLOCK_MASK (0xFFC0)
+
+
 static callback_t flash_event_handlers[FLASH_EV_MAX];
 
 typedef struct {
@@ -90,7 +94,7 @@ static uint8_t tx_rx_buffer[MAX_TRANSACTION_BYTES];
 static bool spi_cs_hold_flag;
 static uint8_t jedec_id[JEDEC_BYTES];
 
-static flash_page_address_t block_page_address;
+static flash_address_t block_page_address;
 // Doubles as feature address
 static uint16_t byte_address;
 static uint8_t feature_value;
@@ -304,8 +308,8 @@ static void block_erase(int32_t status) {
     }
 };
 
-static void flash_erase_block(flash_page_address_t address) {
-    block_page_address = address & BLOCK_MASK;
+static void flash_erase_block(flash_address_t address) {
+    block_page_address = BLOCK_PAGE(address);
     set_write_enable_latch(block_erase);
 };
 
@@ -551,34 +555,34 @@ static bool lock_flash(callback_t notify) {
     return true;
 }
 
-void flash_read(flash_page_address_t bp_addr, uint16_t byte_address_,
+void flash_read(uint32_t address,
                 buffer_t dest, length_t size, callback_t on_complete) {
     if (lock_flash(on_complete)) {
-        byte_address = byte_address_;
+        byte_address = BYTE(address);
         current_transaction.data = dest;
         current_transaction.size = size;
-        block_page_address = bp_addr;
+        block_page_address = BLOCK_PAGE(address);
         PUSH_OP(read_cache);
         populate_cache(FLASH_SUCCESS);
     }
 }
 
 // Setup a write with program data, will clear cache to 0xFF
-void flash_write(flash_page_address_t page, uint16_t byte_address_,
+void flash_write(uint32_t address,
                  buffer_t data, length_t size, callback_t on_complete) {
     if (lock_flash(on_complete)) {
-        block_page_address = page;
-        flash_write_cache(byte_address_, data, size);
+        block_page_address = BLOCK_PAGE(address);
+        flash_write_cache(BYTE(address), data, size);
     }
 }
 
 // Setup a write with program data, random access, will not alter other cache
 // bytes
-void flash_update(flash_page_address_t page, uint16_t byte_address_,
+void flash_update(uint32_t address,
                   buffer_t data, length_t size, callback_t on_complete) {
     if (lock_flash(on_complete)) {
-        block_page_address = page;
-        flash_update_cache(byte_address_, data, size);
+        block_page_address = BLOCK_PAGE(address);
+        flash_update_cache(BYTE(address), data, size);
     }
 }
 

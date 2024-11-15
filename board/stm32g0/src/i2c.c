@@ -7,7 +7,7 @@
 
 #define I2C_QUEUE_LENGTH (4)
 // 1024 bytes of display memory + 1 byte preamble
-#define MAX_I2C_MESSAGE_LENGTH (256 + 1)
+#define MAX_I2C_MESSAGE_LENGTH (1024 + 1)
 
 #define I2C_FLAG_READ (1)
 #define I2C_FLAG_WRITE (0)

@@ -10,7 +10,10 @@ static uint32_t num_words = 0;
 void words_init(void)
 {
     file_open(WORDS_DB);
-    file_read((uint8_t*)&num_words, sizeof(uint32_t));
+    if (file_read((uint8_t*)&num_words, sizeof(uint32_t)) == 0)
+    {
+        num_words = 0;
+    }
 }
 
 uint32_t words_count(void) { return num_words; }

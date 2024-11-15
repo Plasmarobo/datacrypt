@@ -243,7 +243,7 @@ impl RPCMessenger {
     }
 
     fn get_status(&mut self) -> Result<(), RPCStatus> {
-        const TIMEOUT_MS: u128 = 300;
+        const TIMEOUT_MS: u128 = 30000;
         let start = Instant::now();
         while self.buffer.len() < 1
         {
@@ -415,7 +415,7 @@ fn dump_flash(rpc: Rc<RefCell<RPCMessenger>>) {
                         .to_string();
                         println!("{} {:#10x}: {:?}", kind, address, data);
                         file.write(format!("{:#10x}: ", address).as_bytes());
-                        file.write(data.as_slice());
+                        file.write(format!("{:X?}",data).as_bytes());
                         file.write("\n".as_bytes());
                         byte_idx += CHUNK_SIZE as u32;
                         break;
@@ -593,6 +593,38 @@ fn load_wordlist(rpc: Rc<RefCell<RPCMessenger>>) {
     println!("Write finished");
 }
 
+fn erase_flash(rpc: Rc<RefCell<RPCMessenger>>) {
+    const BLOCK_COUNT: usize = 1024;
+    const OOB_SIZE: usize = 64;
+    const CHUNK_SIZE: u8 = 64;
+    const TIMEOUT_SEC: u64 = 5;
+    let mut block_idx: u32 = 0;
+    let byte_idx: u32 = 0;
+    let bad_block_table = bits![mut 0; 1024];
+    println!("Starting flash erase");
+    while block_idx < (BLOCK_COUNT as u32) {
+        
+        print!("Block {}...", block_idx);
+        // Start a time out
+        let address: u32 = ((block_idx << 6)) << 16 | byte_idx;
+        loop {
+            thread::sleep(Duration::from_micros(500));
+            match rpc.borrow_mut().erase_flash(address) {
+                Ok(_) => {
+                    println!("Erased!");
+                    block_idx += 1;
+                    break;
+                }
+                Err(e) => {
+                    println!("Failed at {}, returned status {}", address, e);
+                    thread::sleep(Duration::from_millis(500));
+                }
+            }
+        }
+    }
+    println!("Erase complete");
+}
+
 fn main() {
     let args: Vec<String> = env::args().collect();
     println!("{:?}", args);
@@ -606,9 +638,10 @@ fn main() {
     let rpc = Rc::new(RefCell::new(RPCMessenger::new(Box::new(SyncSerial::new(
         dev_path,
     )))));
-    dump_flash(rpc.clone());
+    //dump_flash(rpc.clone());
     //dump_factory_bbt(rpc.clone());
-    //load_wordlist(rpc.clone());
+    //erase_flash(rpc.clone());
+    load_wordlist(rpc.clone());
 
     loop {
         println!("Enter command");
