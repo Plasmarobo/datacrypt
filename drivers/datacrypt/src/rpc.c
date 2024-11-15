@@ -2,6 +2,7 @@
 
 #include "bsp.h"
 #include "scheduler.h"
+#include "flash.h"
 
 #ifdef RPC
 
@@ -62,8 +63,7 @@ static int32_t rpc_do_command() {
     int32_t status;
     switch (rpc_buffer.code) {
         case RPC_READ_FLASH:
-            WITH_FUTURE(flash_read(rpc_buffer.address >> 16,
-                                   rpc_buffer.address & 0xFFFF, data_buffer,
+            WITH_FUTURE(flash_read(rpc_buffer.address, data_buffer,
                                    rpc_buffer.length, future),
                         MILLIS(RPC_TIMEOUT_MS));
             if (status != STATUS_SUCCESS) {
@@ -74,7 +74,7 @@ static int32_t rpc_do_command() {
             }
             break;
         case RPC_WRITE_FLASH:
-            flash_update(rpc_buffer.address >> 16, rpc_buffer.address & 0xFFFF,
+            flash_update(rpc_buffer.address,
                          data_buffer, rpc_buffer.length, rpc_finish);
             break;
         case RPC_COMMIT_FLASH:

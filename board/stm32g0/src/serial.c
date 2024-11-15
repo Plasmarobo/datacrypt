@@ -14,9 +14,9 @@ static volatile bool serial_lock;
 #define MAX_SERIAL_PACKET (256)
 
 static uint8_t serial_tx_buffer[MAX_SERIAL_PACKET];
-volatile static uint8_t serial_rx_buffer[MAX_SERIAL_PACKET];
-volatile static uint8_t* serial_read_ptr;
-volatile static uint8_t* serial_write_ptr;
+static uint8_t serial_rx_buffer[MAX_SERIAL_PACKET];
+static uint8_t* serial_read_ptr;
+static uint8_t* serial_write_ptr;
 static length_t notify_length;
 static uint8_t* serial_dest;
 
@@ -134,12 +134,12 @@ void serial_printf(const char* fmt, ...) {
     va_start(args, fmt);
     vsnprintf(print_buffer, MAX_SERIAL_PACKET, fmt, args);
     va_end(args);
-    serial_write(print_buffer, strlen(print_buffer), NULL);
+    serial_write((const buffer_t)print_buffer, strlen(print_buffer), NULL);
 }
 
 void vserial_printf(const char* fmt, va_list args) {
     vsnprintf(print_buffer, MAX_SERIAL_PACKET, fmt, args);
-    serial_write(print_buffer, strlen(print_buffer), NULL);
+    serial_write((const buffer_t)print_buffer, strlen(print_buffer), NULL);
 }
 
 void serial_tx_complete_handler(int32_t status) {

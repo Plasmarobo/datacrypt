@@ -24,7 +24,6 @@ static i2c_transaction_t current_txn;
 static callback_t user_callback;
 static int32_t i2c_status;
 static task_handle_t timeout_task = NULL;
-static int32_t retries = 0;
 
 static void i2c_timeout_handler(int32_t status) {
     if (timeout_task != NULL) {

@@ -1,6 +1,8 @@
 #include <stdint.h>
 #include <string.h>
 
+#include <debug.h>
+
 #include "bsp.h"
 #include "defs.h"
 #include "font.h"
@@ -102,9 +104,7 @@ static callback_t user_callback;
 
 static void display_data(callback_t oncomplete);
 static void display_command(length_t arg_len, callback_t oncomplete);
-static void next_state(int32_t status);
-static void update_state(int32_t status);
-;
+
 static void draw_pixel(uint16_t x, uint16_t y, uint8_t value);
 static void draw_rect(uint16_t x, uint16_t y, uint16_t w, uint16_t h);
 static uint8_t get_height() { return ((selected_display % 2) == 0) ? 64 : 32; }

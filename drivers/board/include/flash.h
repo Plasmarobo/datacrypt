@@ -56,7 +56,7 @@ void flash_write(flash_address_t address,
 void flash_update(flash_address_t address,
                   buffer_t data, length_t size, callback_t on_complete);
 void flash_commit(callback_t on_complete);
-void flash_erase(uint32_t addr, callback_t on_complete);
+void flash_erase(flash_address_t addr, callback_t on_complete);
 void flash_register_event_handler(flash_event_t event, callback_t handler);
 
 #endif // FLASH_H

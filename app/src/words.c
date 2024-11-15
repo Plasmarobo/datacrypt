@@ -23,7 +23,7 @@ void words_get(uint32_t index, word_t* storage) {
     if (index < num_words) {
         if (NULL != storage) {
             file_seek((index * MAX_WORD_LENGTH) + sizeof(uint32_t));
-            file_read(storage, MAX_WORD_LENGTH);
+            file_read((buffer_t)storage, MAX_WORD_LENGTH);
         }
     }
 }

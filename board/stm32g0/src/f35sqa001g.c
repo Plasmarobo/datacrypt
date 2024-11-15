@@ -74,8 +74,6 @@
 #define JEDEC_OFFSET (2)
 #define FEATURE_OFFSET (2)
 
-#define BYTE_MASK (0x07FF)
-
 #define INVALID_ADDRESS (0xFFFFFFFF)
 
 #define PAGE_MASK (0x3F)
@@ -555,7 +553,7 @@ static bool lock_flash(callback_t notify) {
     return true;
 }
 
-void flash_read(uint32_t address,
+void flash_read(flash_address_t address,
                 buffer_t dest, length_t size, callback_t on_complete) {
     if (lock_flash(on_complete)) {
         byte_address = BYTE(address);
@@ -568,7 +566,7 @@ void flash_read(uint32_t address,
 }
 
 // Setup a write with program data, will clear cache to 0xFF
-void flash_write(uint32_t address,
+void flash_write(flash_address_t address,
                  buffer_t data, length_t size, callback_t on_complete) {
     if (lock_flash(on_complete)) {
         block_page_address = BLOCK_PAGE(address);
@@ -578,7 +576,7 @@ void flash_write(uint32_t address,
 
 // Setup a write with program data, random access, will not alter other cache
 // bytes
-void flash_update(uint32_t address,
+void flash_update(flash_address_t address,
                   buffer_t data, length_t size, callback_t on_complete) {
     if (lock_flash(on_complete)) {
         block_page_address = BLOCK_PAGE(address);
@@ -592,7 +590,7 @@ void flash_commit(callback_t on_complete) {
     }
 }
 
-void flash_erase(uint32_t addr, callback_t on_complete) {
+void flash_erase(flash_address_t addr, callback_t on_complete) {
     if (lock_flash(on_complete)) {
         flash_erase_block(addr);
     }

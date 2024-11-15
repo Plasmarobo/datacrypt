@@ -12,15 +12,15 @@
 int main() {
     bsp_init();
     scheduler_init();
-    adc_init(NULL);
-    random_init();
+    //adc_init(NULL);
+    //random_init();
     serial_init();
-    leds_init();
-    display_init();
-    filesystem_init(game_init);
+    //leds_init();
+    //display_init();
+    //filesystem_init(game_init);
     flash_init(filesystem_start);
     rpc_init();
-    dbgprint("\r\nBOOT Complete\r\n");
+    //dbgprint("\r\nBOOT Complete\r\n");
     scheduler_freerun();
     return 0;
 }
