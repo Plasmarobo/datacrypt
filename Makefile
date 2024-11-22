@@ -72,7 +72,7 @@ CFLAGS += $(MCU) $(C_DEFS) $(C_INCLUDES) $(OPT) -Wall -fdata-sections -ffunction
 CPP_INCLUDES += $(foreach dir,$(INCDIRS),-I$(dir))
 
 ifeq ($(DEBUG), 1)
-CFLAGS += -g1 -gdwarf-2
+CFLAGS += -g -gdwarf-2
 endif
 
 # Generate dependency information

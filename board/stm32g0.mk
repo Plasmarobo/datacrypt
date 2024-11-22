@@ -27,6 +27,8 @@ C_DEFS =  \
 -DUSE_HAL_DRIVER \
 -DSTM32G030xx 
 
+DEBUG_PRINT ?= 1
+
 ifeq ($(DEBUG_PRINT), 1)
 C_DEFS += -DDEBUG_PRINT
 else

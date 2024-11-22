@@ -142,7 +142,7 @@ void bsp_init(void) {
     /* Reset of all peripherals, Initializes the Flash interface and the
      * Systick. */
     HAL_Init();
-
+    
     /* USER CODE BEGIN Init */
 
     /* USER CODE END Init */
@@ -165,11 +165,12 @@ void bsp_init(void) {
     MX_ADC1_Init();
     MX_CRC_Init();
     MX_TIM14_Init();
-    __HAL_FREEZE_TIM1_DBGMCU();
-    __HAL_FREEZE_TIM3_DBGMCU();
-    __HAL_FREEZE_TIM14_DBGMCU();
+
     /* Initialize interrupts */
     MX_NVIC_Init();
+
+    DBG->APBFZ1 |= DBG_APB_FZ1_DBG_TIM3_STOP;
+    DBG->APBFZ2 |= DBG_APB_FZ2_DBG_TIM14_STOP;
 }
 
 /**

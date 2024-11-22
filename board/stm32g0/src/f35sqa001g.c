@@ -277,6 +277,10 @@ static void status_poll(int32_t status) {
         }
         poll_task = task_delayed(read_status, poll_interval);
     } else {
+        if (NULL != timeout_task) {
+            task_abort(timeout_task);
+            timeout_task = NULL;
+        }
         op_handler_pop(status);
     }
 }

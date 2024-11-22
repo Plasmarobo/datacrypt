@@ -30,7 +30,9 @@ static void i2c_timeout_handler(int32_t status) {
         HAL_I2C_Master_Abort_IT(&hi2c1, current_txn.address);
         timeout_task = NULL;
         if (NULL != current_txn.callback) {
-            task_immediate_signal(current_txn.callback, I2C_ERR_TIMEOUT);
+            callback_t cb = current_txn.callback;
+            current_txn.callback = NULL;
+            cb(I2C_ERR_TIMEOUT);
         }
         i2c_status = I2C_SUCCESS;
     }
@@ -55,60 +57,61 @@ static void i2c_continue_write(int32_t status) {
 
 void i2c_write(uint8_t address, length_t size, buffer_t data,
                callback_t oncomplete) {
-    if (i2c_status != I2C_SUCCESS) {
-        if (NULL != oncomplete) {
-            oncomplete(i2c_status);
+    if (i2c_status == I2C_SUCCESS)
+    {
+        i2c_status = I2C_BUSY;
+        current_txn.address = (address << 1);
+        timeout_task =
+            task_delayed_unique(i2c_timeout_handler, MILLIS(I2C_TIMEOUT_MS));
+        current_txn.length = size;
+        current_txn.data = data;
+        length_t tx_len;
+        if (size <= MAX_I2C_MESSAGE_LENGTH) {
+            user_callback = NULL;
+            current_txn.callback = oncomplete;
+            tx_len = size;
+        } else {
+            user_callback = oncomplete;
+            current_txn.callback = i2c_continue_write;
+            tx_len = MAX_I2C_MESSAGE_LENGTH;
         }
-        return;
-    }
-    i2c_status = I2C_BUSY;
-
-    current_txn.address = (address << 1);
-    timeout_task =
-        task_delayed_unique(i2c_timeout_handler, MILLIS(I2C_TIMEOUT_MS));
-    current_txn.length = size;
-    current_txn.data = data;
-    length_t tx_len;
-    if (size < MAX_I2C_MESSAGE_LENGTH) {
-        user_callback = NULL;
-        current_txn.callback = oncomplete;
-        tx_len = size;
+        HAL_I2C_Master_Transmit_DMA(&hi2c1, current_txn.address, current_txn.data,
+                                    tx_len);
     } else {
-        user_callback = oncomplete;
-        current_txn.callback = i2c_continue_write;
-        tx_len = MAX_I2C_MESSAGE_LENGTH;
+        if (NULL != oncomplete) {
+            oncomplete(I2C_BUSY);
+        }
     }
-    HAL_I2C_Master_Transmit_DMA(&hi2c1, current_txn.address, current_txn.data,
-                                tx_len);
 };
 
 void i2c_read(uint8_t address, length_t max_size, buffer_t data,
               callback_t oncomplete) {
-    if (i2c_status != I2C_SUCCESS) {
+    if (i2c_status == I2C_SUCCESS) {
+        current_txn.callback = oncomplete;
+        current_txn.address = (address << 1);
+        current_txn.length = max_size;
+        timeout_task =
+            task_delayed_unique(i2c_timeout_handler, MILLIS(I2C_TIMEOUT_MS));
+        HAL_I2C_Master_Receive_DMA(&hi2c1, current_txn.address, current_txn.data,
+                                current_txn.length);
+    } else {
         if (NULL != oncomplete) {
             oncomplete(i2c_status);
         }
-        return;
     }
-    current_txn.callback = oncomplete;
-    current_txn.address = (address << 1);
-    current_txn.length = max_size;
-    timeout_task =
-        task_delayed_unique(i2c_timeout_handler, MILLIS(I2C_TIMEOUT_MS));
-    HAL_I2C_Master_Receive_DMA(&hi2c1, current_txn.address, current_txn.data,
-                               current_txn.length);
 }
 
 void i2c_complete_handler(int32_t status) {
-    i2c_status = status;
+    i2c_status = I2C_SUCCESS; // set to idle, status contains any real errors
     if (NULL != timeout_task) {
         task_abort(timeout_task);
         timeout_task = NULL;
     }
     if (NULL != current_txn.callback) {
-        current_txn.callback(i2c_status);
+        callback_t cb = current_txn.callback;
+        current_txn.callback = NULL;
+        cb(I2C_SUCCESS);
     }
-    i2c_status = I2C_SUCCESS;
 }
 
 int32_t i2c_get_status(void) { return i2c_status; }

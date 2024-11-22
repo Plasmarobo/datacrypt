@@ -1,4 +1,5 @@
 use bitvec::bits;
+use scan_rules::scanner::Word;
 use serialport;
 use serialport::SerialPort;
 use core::time;
@@ -156,7 +157,7 @@ struct SyncSerial {
 impl SyncSerial {
     pub fn new(dev_path: String) -> SyncSerial {
         let s_port = serialport::new(dev_path.clone(), 115_200)
-            .timeout(Duration::from_millis(10))
+            .timeout(Duration::from_millis(1000))
             .open()
             .expect("Failed to open port");
         s_port
@@ -206,7 +207,7 @@ enum RPCStatus {
     ERR_TIMEOUT,
     ERR_HOST_TIMEOUT,
     ERR_HOST_CONNECTION,
-    ERR_UNKNOWN,
+    ERR_UNKNOWN(i32),
 }
 
 impl fmt::Display for RPCStatus {
@@ -215,13 +216,14 @@ impl fmt::Display for RPCStatus {
             f,
             "{}",
             match self {
-                RPCStatus::OK => "0 (RPC_OK)",
-                RPCStatus::BUSY => "1 (BUSY)",
-                RPCStatus::ERR_EXEC => "2 (EXEC ERROR)",
-                RPCStatus::ERR_ARG => "3 (ARGUMENT ERROR)",
-                RPCStatus::ERR_TIMEOUT => "4 (RPC TIMEOUT)",
-                RPCStatus::ERR_HOST_TIMEOUT => "5 (HOST TIMEOUT)",
-                _ => "_ (UNKNOWN ERROR)",
+                RPCStatus::OK => String::from("0 (RPC_OK)"),
+                RPCStatus::BUSY => String::from("1 (BUSY)"),
+                RPCStatus::ERR_EXEC => String::from("2 (EXEC ERROR)"),
+                RPCStatus::ERR_ARG => String::from("3 (ARGUMENT ERROR)"),
+                RPCStatus::ERR_TIMEOUT => String::from("4 (RPC TIMEOUT)"),
+                RPCStatus::ERR_HOST_TIMEOUT => String::from("5 (HOST TIMEOUT)"),
+                RPCStatus::ERR_HOST_CONNECTION => String::from("6 (HOST CONNECTION)"),
+                RPCStatus::ERR_UNKNOWN(v) => format!("{v} (UNKNOWN ERROR)"),
             }
         )
     }
@@ -243,7 +245,7 @@ impl RPCMessenger {
     }
 
     fn get_status(&mut self) -> Result<(), RPCStatus> {
-        const TIMEOUT_MS: u128 = 30000;
+        const TIMEOUT_MS: u128 = 1000;
         let start = Instant::now();
         while self.buffer.len() < 1
         {
@@ -265,13 +267,13 @@ impl RPCMessenger {
                 2 => RPCStatus::ERR_EXEC,
                 3 => RPCStatus::ERR_ARG,
                 4 => RPCStatus::ERR_TIMEOUT,
-                _ => RPCStatus::ERR_UNKNOWN,
+                status => RPCStatus::ERR_UNKNOWN(status as i32),
             });
         }
     }
 
     fn get_data(&mut self, length: u8) -> Result<Vec<u8>, String> {
-        const TIMEOUT_MS: u128 = 300;
+        const TIMEOUT_MS: u128 = 1000;
         let start = Instant::now();
         while self.buffer.len() < length as usize {
             if let Some(serial_data) = self.serial.try_read() {
@@ -324,7 +326,7 @@ impl RPCMessenger {
     pub fn write_flash(&mut self, address: u32, data: &[u8]) -> Result<(), RPCStatus> {
         self.buffer.clear();
         self.serial.clear();
-        if (data.len() as u8 > RPCMessenger::RPC_CHUNK) {
+        if data.len() as u8 > RPCMessenger::RPC_CHUNK {
             Err(RPCStatus::ERR_ARG)
         } else {
             self.serial
@@ -385,10 +387,7 @@ impl RPCMessenger {
 fn dump_flash(rpc: Rc<RefCell<RPCMessenger>>) {
     const PAGE_COUNT: usize = 64 * 1024;
     const PAGE_SIZE: usize = 2048;
-    const OOB_SIZE: usize = 64;
-    const FLASH_SIZE: usize = 1024 * (2048 + 64);
     const CHUNK_SIZE: u8 = 64;
-    let mut page_idx: u32 = 0;
     let mut byte_idx: u32 = 0;
     let mut file = File::create(format!(
         "flash_dump_{:?}.bin",
@@ -399,21 +398,14 @@ fn dump_flash(rpc: Rc<RefCell<RPCMessenger>>) {
     ))
     .unwrap();
     println!("Starting flash dump");
-    while page_idx < (PAGE_COUNT as u32) {
-        while byte_idx < ((PAGE_SIZE + OOB_SIZE) as u32) {
+    while byte_idx < (PAGE_COUNT * PAGE_SIZE) as u32 {
             // Start a time out
-            let address: u32 = page_idx << 16 | byte_idx;
+            let address: u32 = byte_idx;
             loop {
                 thread::sleep(Duration::from_micros(500));
                 match rpc.borrow_mut().read_flash(address, CHUNK_SIZE) {
                     Ok(data) => {
-                        let kind = if byte_idx >= (PAGE_SIZE as u32) {
-                            "OOB"
-                        } else {
-                            "DAT"
-                        }
-                        .to_string();
-                        println!("{} {:#10x}: {:?}", kind, address, data);
+                        println!("{:#10x}: {:?}", address, data);
                         file.write(format!("{:#10x}: ", address).as_bytes());
                         file.write(format!("{:X?}",data).as_bytes());
                         file.write("\n".as_bytes());
@@ -426,70 +418,25 @@ fn dump_flash(rpc: Rc<RefCell<RPCMessenger>>) {
                     }
                 }
             }
-        }
-        page_idx += 1;
-        byte_idx = 0;
+        byte_idx += 64;
     }
 }
 
 fn dump_factory_bbt(rpc: Rc<RefCell<RPCMessenger>>) {
-    const BLOCK_COUNT: usize = 1024;
-    const OOB_SIZE: usize = 64;
-    const CHUNK_SIZE: u8 = 64;
-    const TIMEOUT_SEC: u64 = 5;
-    let mut block_idx: u32 = 0;
-    let byte_idx: u32 = 2048;
-    let mut file = File::create(format!(
-        "factory_bbt_dump_{:?}.bin",
-        SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap()
-            .as_secs()
-    ))
-    .unwrap();
-    let bad_block_table = bits![mut 0; 1024];
-    println!("Starting flash dump");
-    while block_idx < (BLOCK_COUNT as u32) {
-        for page_idx in 0..2 {
-            println!("Block {}, page {}", block_idx, page_idx);
-            // Start a time out
-            let address: u32 = ((block_idx << 6) + page_idx) << 16 | byte_idx;
-            loop {
-                thread::sleep(Duration::from_micros(500));
-                match rpc.borrow_mut().read_flash(address, CHUNK_SIZE) {
-                    Ok(data) => {
-                        if data[0..2] != *("ff".as_bytes()) {
-                            let bit = bad_block_table.get_mut(block_idx as usize).unwrap();
-                            bit.commit(true);
-                            println!("OOB {:#10x}: {:?}", address, data);
-                        }
-                        file.write(data.as_slice());
-                        break;
-                    }
-                    Err(e) => {
-                        println!("Read of {} returned status {}", address, e);
-                        thread::sleep(Duration::from_millis(500));
-                    }
-                }
-            }
-        }
-        block_idx += 1;
-    }
-    println!("BBT: {}", bad_block_table);
+    // We can't read from oob with a normal read command...
 }
 
 struct WordBuffer {
     rpc: Rc<RefCell<RPCMessenger>>,
     write_buffer: Vec<u8>,
-    page_idx: u32,
-    byte_idx: u32,
+    address: u32,
 }
 
 impl WordBuffer {
     const PAGE_SIZE: usize = 2048;
     const CHUNK_SIZE: usize = 64;
     // Logical wordlist start address
-    const WORDLIST_BASE: u32 = 0x00000800;
+    const WORDLIST_BASE: u32 = 0x00001000;
     const WORDLIST_PITCH: usize = 16; // Words are a maximum of 16 bytes long
     const WORDLIST_SLOTS_PER_PAGE: usize = WordBuffer::PAGE_SIZE / WordBuffer::WORDLIST_PITCH;
 
@@ -497,31 +444,23 @@ impl WordBuffer {
         return WordBuffer {
             rpc: _rpc,
             write_buffer: Vec::<u8>::new(),
-            page_idx: 1,
-            byte_idx: 4,
+            address: WordBuffer::WORDLIST_BASE
         };
     }
 
     pub fn add_word(&mut self, word: String) {
         self.write_buffer.extend(word.trim().as_bytes());
-        let remaining_length: usize = WordBuffer::WORDLIST_PITCH - word.len() - if self.page_idx == 1 { 4 } else { 0 };
-        if remaining_length > 0 {
-            self.write_buffer.extend(vec![0; remaining_length]);
-        }
-        if self.write_buffer.len() >= WordBuffer::PAGE_SIZE {
-            self.commit();
+        // We need to read back when we roll over a page, but we can write to the same page multiple times before commiting
+        let pad_length: usize = WordBuffer::WORDLIST_PITCH - word.len();
+        if pad_length > 0 {
+            self.write_buffer.extend(vec![0; pad_length]);
         }
     }
 
     pub fn add_header(&mut self, count: u32) {
-        match self
-            .rpc
-            .borrow_mut()
-            .write_flash(self.page_idx << 16, &count.to_le_bytes())
-        {
-            Ok(()) => println!("Wrote {} bytes", 4),
-            Err(e) => panic!("Error writing header: {}", e),
-        }
+        self.write_buffer.extend(&count.to_le_bytes());
+        // align to 16 bytes
+        self.write_buffer.extend(vec![0; 12]);
     }
 
     pub fn commit(&mut self) {
@@ -530,46 +469,61 @@ impl WordBuffer {
         // use a read -> modify -> write flow
         // Discard this read result, it's just used to populate the buffer
         for buffer in self.write_buffer.chunks(WordBuffer::CHUNK_SIZE) {
-            let mut retry = 3;
-            let address: u32 = (self.page_idx << 16) | self.byte_idx;
-            println!(
-                "Commiting {} bytes at page {}, offset {}",
-                WordBuffer::CHUNK_SIZE,
-                self.page_idx,
-                self.byte_idx
-            );
+            let mut retry = 5;
             while retry > 0 {
-                match self.rpc.borrow_mut().write_flash(address, buffer) {
+                // This may need to be adjusted if the header changes
+                if self.address % WordBuffer::PAGE_SIZE as u32 == 0
+                {
+                    // Flush to flash, assume header has already been accounted for
+                    print!("Committing page at 0x{:08x}..", self.address);
+                    match self.rpc.borrow_mut().commit_flash() {
+                        Ok(()) => println!("Ok"),
+                        Err(e) => panic!(
+                            "Error commmiting address {} to flash, got status {}",
+                            self.address, e
+                        ),
+                    }
+                    // Read the next page into the flash chip buffer
+                    print!("Reading page at 0x{:08x}...", self.address);
+                    match self
+                        .rpc
+                        .borrow_mut()
+                        .read_flash(self.address, WordBuffer::CHUNK_SIZE as u8)
+                    {
+                        Ok(_data) => println!("Ok"),
+                        Err(e) => {
+                            println!("WARNING: failed to read next page with status {}", e);
+                            retry -= 1;
+                            continue;
+                        }
+                    }
+                }
+                print!("Writing chunk at 0x{:08x}...", self.address);
+                match self.rpc.borrow_mut().write_flash(self.address, buffer) {
                     Ok(()) => {
                         println!("Wrote {} bytes", WordBuffer::CHUNK_SIZE);
                         retry = 0;
-                        self.byte_idx += buffer.len() as u32;
+                        // This needs to align to page boundaries (PAGE_SIZE)
+                        self.address += WordBuffer::CHUNK_SIZE as u32;
                     }
                     Err(e) => {
-                        println!("Write return status: {}", e);
+                        println!("Write returned status: {}", e);
                         retry -= 1;
+                        continue
                     }
                 }
             }
-            if self.byte_idx as usize >= WordBuffer::PAGE_SIZE {
-                // Flush to flash
-                match self.rpc.borrow_mut().commit_flash() {
-                    Ok(()) => (),
-                    Err(e) => panic!(
-                        "Error commmiting page {} to flash, got status {}",
-                        self.page_idx, e
-                    ),
-                }
-                self.page_idx += 1;
-                self.byte_idx = 0;
-                match self
-                    .rpc
-                    .borrow_mut()
-                    .read_flash(self.page_idx << 16, WordBuffer::CHUNK_SIZE as u8)
-                {
-                    Ok(_data) => (),
-                    Err(e) => println!("WARNING: failed to read next page with status {}", e),
-                }
+        }
+        print!("Commiting final page at {}...", self.address);
+        if (self.address % WordBuffer::PAGE_SIZE as u32 != 0)
+        {
+            // Flush partial page to flash
+            match self.rpc.borrow_mut().commit_flash() {
+                Ok(()) => println!("Ok"),
+                Err(e) => panic!(
+                    "Error commmiting final page to flash, got status {}",
+                    e
+                ),
             }
         }
         self.write_buffer.clear();
@@ -595,18 +549,19 @@ fn load_wordlist(rpc: Rc<RefCell<RPCMessenger>>) {
 
 fn erase_flash(rpc: Rc<RefCell<RPCMessenger>>) {
     const BLOCK_COUNT: usize = 1024;
+    const BLOCK_SIZE: u32 = 64 * 2048;
     const OOB_SIZE: usize = 64;
     const CHUNK_SIZE: u8 = 64;
     const TIMEOUT_SEC: u64 = 5;
     let mut block_idx: u32 = 0;
+    
     let byte_idx: u32 = 0;
-    let bad_block_table = bits![mut 0; 1024];
     println!("Starting flash erase");
     while block_idx < (BLOCK_COUNT as u32) {
         
         print!("Block {}...", block_idx);
         // Start a time out
-        let address: u32 = ((block_idx << 6)) << 16 | byte_idx;
+        let address: u32 = (block_idx * BLOCK_SIZE);
         loop {
             thread::sleep(Duration::from_micros(500));
             match rpc.borrow_mut().erase_flash(address) {
@@ -616,7 +571,7 @@ fn erase_flash(rpc: Rc<RefCell<RPCMessenger>>) {
                     break;
                 }
                 Err(e) => {
-                    println!("Failed at {}, returned status {}", address, e);
+                    println!("Failed at {:08x}, returned status {}", address, e);
                     thread::sleep(Duration::from_millis(500));
                 }
             }
@@ -638,10 +593,10 @@ fn main() {
     let rpc = Rc::new(RefCell::new(RPCMessenger::new(Box::new(SyncSerial::new(
         dev_path,
     )))));
-    //dump_flash(rpc.clone());
+    dump_flash(rpc.clone());
     //dump_factory_bbt(rpc.clone());
     //erase_flash(rpc.clone());
-    load_wordlist(rpc.clone());
+    //load_wordlist(rpc.clone());
 
     loop {
         println!("Enter command");

@@ -5,7 +5,7 @@
 
 #include "defs.h"
 
-#define MAX_TASKS (32)
+#define MAX_TASKS (48)
 #define EXEC_DEPTH_LIMIT (4)
 
 static volatile timespan_t last_tick;
@@ -263,12 +263,12 @@ int32_t future_await(callback_t awaited_future, timespan_t timeout)
     timespan_t start = microseconds();
     while(NULL != future_waiting)
     {
-        scheduler_exec();
         timespan_t delta = (microseconds() - start);
         if (delta > timeout) {
             future_resolve(FUTURE_TIMEOUT);
             break;
         }
+        scheduler_exec();
     }
     return future_status;
 }

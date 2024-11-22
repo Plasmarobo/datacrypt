@@ -238,7 +238,7 @@ void file_open(const char* path) {
 
 size_t file_read(buffer_t dest, size_t size) {
     future_t future;
-    uint32_t status;
+    uint32_t status = 0;
     uint32_t count = 0;
 
     while (size)

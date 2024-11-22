@@ -35,6 +35,7 @@ static void rpc_finish(int32_t status) {
         rpc_timeout_task = NULL;
     }
     serial_flush_rx();
+    serial_read((buffer_t)&rpc_buffer, sizeof(rpc_t), rpc_exec);
     rpc_state = RPC_READ_COMMAND;
 }
 
@@ -43,6 +44,7 @@ static void rpc_timeout_handler(int32_t status) {
     serial_flush_rx();
     rpc_state = RPC_TIMEOUT;
     rpc_timeout_task = NULL;
+    serial_read((buffer_t)&rpc_buffer, sizeof(rpc_t), rpc_exec);
 }
 
 static void rpc_start_timeout(int32_t status) {
@@ -55,6 +57,7 @@ static void rpc_continue(int32_t status) {
     if (rpc_timeout_task == NULL) {
         rpc_start_timeout(0);
     }
+    serial_read((buffer_t)&rpc_buffer, sizeof(rpc_t), rpc_exec);
 }
 
 static int32_t rpc_do_command() {
@@ -101,7 +104,6 @@ static int32_t rpc_do_command() {
 }
 
 static void rpc_exec(int32_t status) {
-    serial_read((buffer_t)&rpc_buffer, sizeof(rpc_t), rpc_exec);
     if (status == RPC_STATUS_OK) {
         switch (rpc_state) {
             case RPC_READ_COMMAND:
@@ -109,8 +111,8 @@ static void rpc_exec(int32_t status) {
                     // Start read of data
                     if (rpc_buffer.code == 'w' || rpc_buffer.code == 'p') {
                         rpc_state = RPC_READ_DATA;
-                        serial_read(data_buffer, rpc_buffer.length, rpc_exec);
                         rpc_send_status(RPC_STATUS_OK);
+                        serial_read(data_buffer, rpc_buffer.length, rpc_exec);
                         rpc_start_timeout(0);
                     } else {
                         rpc_do_command();

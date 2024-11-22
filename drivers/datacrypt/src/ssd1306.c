@@ -75,7 +75,7 @@
 #define CLK_DIVIDER (0x80)
 
 #define MUX_ENABLE_DELAY_MS (100)
-#define DISPLAY_TASK_PERIOD_MS (100)
+#define DISPLAY_TASK_PERIOD_MS (10)
 #define DISPLAY_STATE_STACK_DEPTH (8)
 #define DISPLAY_USER_CALLBACK_DEPTH (4)
 #define DISPLAY_COMMAND_BUFFER_DEPTH (33)
@@ -88,134 +88,26 @@
 #define FB_LOCKED (0x01)
 #define HW_LOCKED (0x02)
 
-#define DISPLAY_RETRY_DELAY_MS (1)
-#define DISPLAY_TIMEOUT_MS (200)
+#define DISPLAY_RETRY_DELAY_MS (10)
+#define DISPLAY_TIMEOUT_MS (100)
 #define DISPLAY_DEFAULT_RETRIES (3)
 
-static uint8_t data_buffer[1 + DISPLAY_FRAMEBUFFER_DEPTH];
-static uint8_t* const framebuffer = data_buffer + 1;
-static uint8_t command_buffer[DISPLAY_COMMAND_BUFFER_DEPTH];
+#define RETRY_DELAY_MS (10)
 
-static uint8_t selected_display;
-static uint8_t display_pages;
-static state_t* current_state;
-static uint32_t retries = 0;
-static callback_t user_callback;
+typedef enum {
+    INIT,
+    SETUP_SELECT,
+    SETUP_SETTLE,
+    SETUP_COMMAND,
+    SETUP_DATA,
+    IDLE,
+    MUX_SELECT,
+    MUX_SETTLE,
+    WRITE_COMMAND,
+    WRITE_DATA,
+} DISPLAY_STATES;
 
-static void display_data(callback_t oncomplete);
-static void display_command(length_t arg_len, callback_t oncomplete);
-
-static void draw_pixel(uint16_t x, uint16_t y, uint8_t value);
-static void draw_rect(uint16_t x, uint16_t y, uint16_t w, uint16_t h);
-static uint8_t get_height() { return ((selected_display % 2) == 0) ? 64 : 32; }
-
-static void display_setup(callback_t on_complete)
-{
-    uint8_t *cmd_ptr = command_buffer + 1;
-    *cmd_ptr = CMD_SLEEP;
-    ++cmd_ptr; *cmd_ptr = CMD_MULTIPLEX_RATIO;
-    ++cmd_ptr; *cmd_ptr = get_height() - 1;
-    ++cmd_ptr; *cmd_ptr = CMD_ADDR_MODE;
-    ++cmd_ptr; *cmd_ptr = ADDR_MODE_HORZ;
-    ++cmd_ptr; *cmd_ptr = CMD_SET_COLUMN;
-    ++cmd_ptr; *cmd_ptr = 0;
-    ++cmd_ptr; *cmd_ptr = 127;
-    ++cmd_ptr; *cmd_ptr = CMD_SET_PAGE;
-    ++cmd_ptr; *cmd_ptr = 0;
-    ++cmd_ptr; *cmd_ptr = 7;
-    ++cmd_ptr; *cmd_ptr = CMD_START_LINE_ADDR;
-    ++cmd_ptr; *cmd_ptr = CMD_DISPLAY_OFFSET;
-    ++cmd_ptr; *cmd_ptr = 0;
-    ++cmd_ptr; *cmd_ptr = CMD_SEGMENT_MODE_ALT;
-    ++cmd_ptr; *cmd_ptr = CMD_SCAN_DIRECTION_ALT;
-    ++cmd_ptr; *cmd_ptr = CMD_HW_PIN_CONF;
-    ++cmd_ptr; *cmd_ptr = ((selected_display % 2) == 0) ? 0x12 : 0x02;
-    ++cmd_ptr; *cmd_ptr = CMD_SET_CONTRAST;
-    ++cmd_ptr; *cmd_ptr = 0x7F;
-    ++cmd_ptr; *cmd_ptr = CMD_DISPLAY_RAM;
-    ++cmd_ptr; *cmd_ptr = CMD_NONINVERTED_MODE;
-    ++cmd_ptr; *cmd_ptr = CMD_DIVIDER;
-    ++cmd_ptr; *cmd_ptr = 0x80;
-    ++cmd_ptr; *cmd_ptr = CMD_PRECHARGE_PERIOD;
-    ++cmd_ptr; *cmd_ptr = 0xC2;
-    ++cmd_ptr; *cmd_ptr = CMD_VCOMH_DESELECT;
-    ++cmd_ptr; *cmd_ptr = 0x40;
-    ++cmd_ptr; *cmd_ptr = CMD_ENABLE_CHARGE_PUMP;
-    ++cmd_ptr; *cmd_ptr = 0x14;
-    ++cmd_ptr; *cmd_ptr = CMD_WAKE;
-    display_command(32, on_complete);
-};
-
-static void display_write_handler(int32_t status)
-{
-    if (user_callback != NULL)
-    {
-        user_callback(status);
-        user_callback = NULL;
-    }
-}
-
-static void display_write(int32_t status)
-{
-    if (0 == status)
-    {
-        display_data(display_write_handler);
-    }
-    else
-    {
-        dbgprintf("Unable to setup write: %d", status);
-    }
-}
-
-static void display_setup_write(int32_t status)
-{
-    if (0 == status)
-    {
-        command_buffer[1] = CMD_SET_PAGE;
-        command_buffer[2] = 0;
-        command_buffer[3] = 0xFF;
-        command_buffer[4] = CMD_SET_COLUMN;
-        command_buffer[5] = 0;
-        command_buffer[6] = 127;
-        display_command(7, display_write);
-    }
-    else
-    {
-        dbgprintf("Unable to select display %d: %d", selected_display, status);
-    }
-}
-
-uint8_t test_image[8] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
-
-void display_init(void) {
-    // Copy bootmsg into framebuffer
-    selected_display = 0;
-    display_pages = 0;
-    current_state = NULL;
-    user_callback = NULL;
-    display_mux_enable();
-    display_clear();
-    future_t future;
-    int32_t status;
-    for(uint8_t i = 0; i < DISPLAY_MAX; ++i)
-    {
-        WITH_FUTURE(display_select(i, future), MILLIS(DISPLAY_TIMEOUT_MS));
-        if (status != 0)
-        {
-            dbgprintf("Failed selecting display %d", i);
-        }
-        WITH_FUTURE(display_setup(future), MILLIS(DISPLAY_TIMEOUT_MS));
-        if (status != 0)
-        {
-            dbgprintf("Failed setting up display %d", i);
-        }
-        WITH_FUTURE(display_show(i, future), MILLIS(DISPLAY_TIMEOUT_MS));
-        if (status != 0)
-        {
-            dbgprintf("Failed showing display %d", i);
-        }
-    }
-}
+static int32_t disp_state;
 
 static struct {
     length_t size;
@@ -224,15 +116,149 @@ static struct {
     uint8_t retries;
 } current_txn;
 
+static uint8_t data_buffer[1 + DISPLAY_FRAMEBUFFER_DEPTH];
+static uint8_t* const framebuffer = data_buffer + 1;
+static uint8_t command_buffer[DISPLAY_COMMAND_BUFFER_DEPTH];
+
+static uint8_t selected_display;
+static uint8_t init_displays;
+static uint8_t display_pages;
+static uint32_t retries = 0;
+static callback_t user_callback;
+
+static void display_data(callback_t oncomplete);
+static void display_command(length_t arg_len, callback_t oncomplete);
+static void display_handler(int32_t status);
+
+static void draw_pixel(uint16_t x, uint16_t y, uint8_t value);
+static void draw_rect(uint16_t x, uint16_t y, uint16_t w, uint16_t h);
+static uint8_t get_height() { return ((selected_display % 2) == 0) ? 64 : 32; }
+static void retry_write(int32_t status);
+
+static void display_setup(callback_t on_complete) {
+    uint8_t* cmd_ptr = command_buffer + 1;
+    *cmd_ptr = CMD_SLEEP;
+    ++cmd_ptr;
+    *cmd_ptr = CMD_MULTIPLEX_RATIO;
+    ++cmd_ptr;
+    *cmd_ptr = get_height() - 1;
+    ++cmd_ptr;
+    *cmd_ptr = CMD_ADDR_MODE;
+    ++cmd_ptr;
+    *cmd_ptr = ADDR_MODE_HORZ;
+    ++cmd_ptr;
+    *cmd_ptr = CMD_SET_COLUMN;
+    ++cmd_ptr;
+    *cmd_ptr = 0;
+    ++cmd_ptr;
+    *cmd_ptr = 127;
+    ++cmd_ptr;
+    *cmd_ptr = CMD_SET_PAGE;
+    ++cmd_ptr;
+    *cmd_ptr = 0;
+    ++cmd_ptr;
+    *cmd_ptr = 7;
+    ++cmd_ptr;
+    *cmd_ptr = CMD_START_LINE_ADDR;
+    ++cmd_ptr;
+    *cmd_ptr = CMD_DISPLAY_OFFSET;
+    ++cmd_ptr;
+    *cmd_ptr = 0;
+    ++cmd_ptr;
+    *cmd_ptr = CMD_SEGMENT_MODE_ALT;
+    ++cmd_ptr;
+    *cmd_ptr = CMD_SCAN_DIRECTION_ALT;
+    ++cmd_ptr;
+    *cmd_ptr = CMD_HW_PIN_CONF;
+    ++cmd_ptr;
+    *cmd_ptr = ((selected_display % 2) == 0) ? 0x12 : 0x02;
+    ++cmd_ptr;
+    *cmd_ptr = CMD_SET_CONTRAST;
+    ++cmd_ptr;
+    *cmd_ptr = 0x7F;
+    ++cmd_ptr;
+    *cmd_ptr = CMD_DISPLAY_RAM;
+    ++cmd_ptr;
+    *cmd_ptr = CMD_NONINVERTED_MODE;
+    ++cmd_ptr;
+    *cmd_ptr = CMD_DIVIDER;
+    ++cmd_ptr;
+    *cmd_ptr = 0x80;
+    ++cmd_ptr;
+    *cmd_ptr = CMD_PRECHARGE_PERIOD;
+    ++cmd_ptr;
+    *cmd_ptr = 0xC2;
+    ++cmd_ptr;
+    *cmd_ptr = CMD_VCOMH_DESELECT;
+    ++cmd_ptr;
+    *cmd_ptr = 0x40;
+    ++cmd_ptr;
+    *cmd_ptr = CMD_ENABLE_CHARGE_PUMP;
+    ++cmd_ptr;
+    *cmd_ptr = 0x14;
+    ++cmd_ptr;
+    *cmd_ptr = CMD_WAKE;
+    display_command(32, on_complete);
+};
+
+static void display_setup_write() {
+    command_buffer[1] = CMD_SET_PAGE;
+    command_buffer[2] = 0;
+    command_buffer[3] = 0xFF;
+    command_buffer[4] = CMD_SET_COLUMN;
+    command_buffer[5] = 0;
+    command_buffer[6] = 127;
+    display_command(7, display_handler);
+}
+
+static void display_exec() {
+    disp_state = MUX_SELECT;
+    display_select(selected_display, display_handler);
+}
+
+void display_init(void) {
+    // Copy bootmsg into framebuffer
+    disp_state = INIT;
+    selected_display = 0;
+    display_pages = 0;
+    user_callback = NULL;
+    display_mux_enable();
+    display_clear();
+    //display_blit(0, 0, img_millibyte_alt_cropped, 128, 32);
+    // start the driver
+    init_displays = 0;
+    display_handler(0);
+}
+
 static void transaction_handler(int32_t status) {
-    if ((I2C_SUCCESS == status) || (current_txn.retries == 0)) {
-        if (NULL != current_txn.on_complete) {
-            current_txn.on_complete(status);
+    if (I2C_SUCCESS == status) {
+        
+        if (current_txn.on_complete != NULL)
+        {
+            callback_t cb = current_txn.on_complete;
+            current_txn.on_complete = NULL;
+            cb(I2C_SUCCESS);
         }
     } else {
+        task_delayed_unique(retry_write, MILLIS(RETRY_DELAY_MS));
+    }
+}
+
+static void retry_write(int32_t status) {
+    if (current_txn.retries > 0)
+    {
         --current_txn.retries;
         i2c_write(DISPLAY_ADDRESS_CMD, current_txn.size, current_txn.data,
-                  transaction_handler);
+                transaction_handler);
+    }
+    else
+    {
+        if (current_txn.on_complete != NULL)
+        {
+            callback_t cb = current_txn.on_complete;
+            current_txn.on_complete = NULL;
+            cb(I2C_ERR_UNKNOWN);
+        }
     }
 }
 
@@ -296,10 +322,19 @@ void display_set_inverted(bool inv, callback_t oncomplete) {
 }
 
 void display_show(uint8_t display, callback_t oncomplete) {
-
-    retries = DISPLAY_DEFAULT_RETRIES;
-    user_callback = oncomplete;
-    display_select(display, display_setup_write);
+    if (disp_state == IDLE)
+    {
+        retries = DISPLAY_DEFAULT_RETRIES;
+        user_callback = oncomplete;
+        selected_display = display;
+        display_exec(0);
+    } else {
+        if (NULL != oncomplete)
+        {
+            oncomplete(DISPLAY_ERR_BUSY);
+        }
+    }
+    
 }
 
 static void draw_pixel(uint16_t x, uint16_t y, uint8_t value) {
@@ -338,3 +373,67 @@ void display_blit(uint8_t x, uint8_t y, const buffer_t img, uint8_t width,
 }
 
 void display_clear() { memset(framebuffer, 0x00, DISPLAY_FRAMEBUFFER_DEPTH); }
+
+// Called on result of a step
+void display_handler(int32_t status)
+{
+    if (I2C_SUCCESS == status)
+    {
+        switch(disp_state)
+        {
+            case INIT:
+                if (init_displays < DISPLAY_MAX)
+                {
+                    selected_display = init_displays;
+                    disp_state = SETUP_SELECT;
+                    display_select(selected_display, display_handler);
+                } else {
+                    disp_state = IDLE;
+                }
+                break;
+            case SETUP_SELECT:
+                disp_state = SETUP_SETTLE;
+                display_select_settle(display_handler);
+                break;
+            case SETUP_SETTLE:
+                disp_state = SETUP_COMMAND;
+                display_setup(display_handler);
+                break;
+            case SETUP_COMMAND:
+                disp_state = SETUP_DATA;
+                display_data(display_handler);
+                break;
+            case SETUP_DATA:
+                ++init_displays;
+                disp_state = INIT;
+                display_handler(0);
+                break;
+            case IDLE:
+                break;
+            case MUX_SELECT:
+                disp_state = MUX_SETTLE;
+                display_select_settle(display_handler);
+                break;
+            case MUX_SETTLE:
+                disp_state = WRITE_COMMAND;
+                display_setup_write(display_handler);
+                break;
+            case WRITE_COMMAND:
+                disp_state = WRITE_DATA;
+                display_data(display_handler);
+                break;
+            case WRITE_DATA:
+                disp_state = IDLE;
+                if (NULL != user_callback)
+                {
+                    user_callback(0);
+                    user_callback = NULL;
+                }
+                break;
+            default:
+                break;
+        }
+    } else {
+        task_delayed(display_handler, MILLIS(DISPLAY_RETRY_DELAY_MS));
+    }
+}

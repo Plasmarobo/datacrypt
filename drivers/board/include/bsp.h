@@ -111,9 +111,12 @@ void audio_shutdown(bool shutdown);
 #define DISP7_INDEX (0x40)
 #define DISPLAY_MAX (8)
 
+#define DISPLAY_ERR_BUSY (-401)
+
 void display_init(void);
 void display_mux_enable();
 void display_select(uint8_t index, callback_t on_complete);
+void display_select_settle(callback_t on_complete);
 uint8_t display_get_selected();
 void display_set_inverted(bool inv, callback_t oncomplete);
 void display_set_text(uint8_t x, uint8_t y, const char *text, length_t length);

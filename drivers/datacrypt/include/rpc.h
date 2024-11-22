@@ -25,7 +25,7 @@
 #define RPC_TIMEOUT_MS (500)
 
 enum rpc_states {
-    RPC_READ_COMMAND,
+    RPC_READ_COMMAND = 0,
     RPC_READ_DATA,
     RPC_EXEC,
     RPC_TIMEOUT,

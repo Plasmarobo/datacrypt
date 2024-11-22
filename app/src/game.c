@@ -10,7 +10,7 @@
 #include "images.h"
 
 #define LED_PERIOD_MS (33)
-#define DISPLAY_PERIOD_MS (33)
+#define DISPLAY_PERIOD_MS (100)
 #define INPUT_PERIOD_MS (100)
 
 #define TEAM_COUNT (2)
@@ -192,16 +192,20 @@ static void led_handler() { leds_write(); }
 
 static void game_handler(int32_t _status) {
     future_t future;
-    int32_t status;
+    int32_t status = 0;
+    char message[32];
     switch (gs) {
         case SPLASH:
-            display_blit(0, 0, img_millibyte_alt_cropped, 128, 32);
             for(uint8_t i = 0; i < DISPLAY_MAX; ++i)
             {
-                WITH_FUTURE(display_show(i, future), DISPLAY_PERIOD_MS);
+                display_clear();
+                snprintf(message, 32, "display %d", i);
+                message[31] = '\0';
+                display_set_text(1,1, message, strlen(message));
+                WITH_FUTURE(display_show(i, future), MILLIS(DISPLAY_PERIOD_MS));
             }
-            gs = MAIN_MENU;
-            task_delayed(game_handler, 2000);
+            //gs = MAIN_MENU;
+            //task_delayed(game_handler, 2000);
             break;
         case MAIN_MENU:
             blank_displays();

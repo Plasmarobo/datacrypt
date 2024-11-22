@@ -9,11 +9,11 @@
 
 #define I2C_TIMEOUT_MS (500)
 #define I2C_SUCCESS (0)
-#define I2C_BUSY (-1)
-#define I2C_ERR_TIMEOUT (-2)
-#define I2C_ERR_NAK (-3)
-#define I2C_ERR_PROTOCOL (-4)
-#define I2C_ERR_UNKNOWN (-8)
+#define I2C_BUSY (-301)
+#define I2C_ERR_TIMEOUT (-302)
+#define I2C_ERR_NAK (-303)
+#define I2C_ERR_PROTOCOL (-304)
+#define I2C_ERR_UNKNOWN (-308)
 
 void i2c_write(uint8_t address, length_t size, buffer_t data,
                callback_t oncomplete);
