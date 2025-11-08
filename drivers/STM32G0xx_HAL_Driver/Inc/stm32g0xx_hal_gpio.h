@@ -19,7 +19,7 @@
 /* Define to prevent recursive inclusion -------------------------------------*/
 #ifndef STM32G0xx_HAL_GPIO_H
 #define STM32G0xx_HAL_GPIO_H
-
+#include <stdint.h>
 #ifdef __cplusplus
 extern "C" {
 #endif

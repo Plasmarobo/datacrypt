@@ -11,6 +11,9 @@ static task_data_t tasks[MAX_TASKS];
 static callback_t future_waiting;
 static int32_t future_status;
 
+callback_t default_future;
+int32_t default_status;
+
 static task_data_t* get_free_task() {
     for (uint8_t i = 0; i < MAX_TASKS; ++i) {
         if (TASK_FREE == tasks[i].type) {
@@ -139,6 +142,8 @@ void scheduler_init() {
     }
     last_tick = microseconds();
     future_waiting = NULL;
+    default_future = NULL;
+    default_status = 0;
 }
 
 void scheduler_exec() {

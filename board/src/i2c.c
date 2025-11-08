@@ -1,3 +1,5 @@
+#include <string.h>
+
 #include "i2c.h"
 
 #include "bsp.h"

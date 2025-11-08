@@ -2,3 +2,4 @@ build
 *.d
 *.o
 .vscode
+compile_commands.json

@@ -35,13 +35,14 @@ static int32_t rpc_do_command() {
             break;
         case 'p':
             display_clear();
-            display_set_text(8, 8, data_buffer, rpc_buffer.length);
+            draw_text(8, 8, data_buffer, rpc_buffer.length);
             display_show((uint8_t)rpc_buffer.address, rpc_finish);
             break;
         default:
             rpc_finish(RPC_STATUS_ERR_ARG);
             break;
     }
+    return STATUS_OK;
 }
 
 static void rpc_exec(int32_t status) {

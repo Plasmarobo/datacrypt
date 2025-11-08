@@ -93,7 +93,6 @@ static void config_polling_op(timespan_t interval, timespan_t timeout);
 static void status_poll(int32_t status);
 static void check_status(int32_t status);
 static void timeout_handler(int32_t status);
-static void bad_block_scan_start(int32_t status);
 static void flash_write_cache(uint16_t byte_address, buffer_t source,
                               length_t length);
 static void query_jedec(int32_t status);
@@ -213,7 +212,7 @@ static void check_bbt_value(int32_t status) {
         if (!(block_page_address & PAGE_MASK)) {
             // Check page 2
             block_page_address += 1;
-            byte_address - OOB_BASE_ADDRESS;
+            byte_address = OOB_BASE_ADDRESS;
             general_buffer = ERASED_VALUE;
             stack_push(&op_stack, &check_bbt_value);
             populate_cache(FLASH_SUCCESS);
@@ -241,7 +240,7 @@ static void flash_reset(int32_t status) {
     byte_address = PAGE_SIZE;
     current_transaction.data = &general_buffer;
     current_transaction.size = 1;
-    stack_push(&op_stack, &bad_block_scan_start);
+    // stack_push(&op_stack, &query_jedec);
     task_delayed(query_jedec, MICROS(TRST_US));
 };
 
@@ -328,11 +327,13 @@ static void query_jedec(int32_t status) {
 static bool write(buffer_t buffer, length_t len, callback_t oncomplete) {
     operation_callback = oncomplete;
     HAL_SPI_Transmit_DMA(&hspi2, buffer, len);
+    return true;
 }
 
 static bool read(buffer_t buffer, length_t len, callback_t oncomplete) {
     operation_callback = oncomplete;
     HAL_SPI_Receive_DMA(&hspi2, buffer, len);
+    return true;
 }
 
 static void timeout_handler(int32_t status) {

@@ -1,5 +1,5 @@
-#ifndef RPC_H
-#define RPC_H
+#ifndef __RPC_HAL_H_
+#define __RPC_HAL_H_
 
 #include <stdint.h>
 
@@ -21,18 +21,29 @@
 #define RPC_STATUS_ERR_EXEC (2)
 #define RPC_STATUS_ERR_ARG (3)
 
-typedef enum {
-    RPC_READ_COMMAND,
-    RPC_READ_DATA,
-    RPC_EXEC,
-} rpc_state_t;
-
-typedef struct {
-    char code;
-    uint32_t address;
-    uint8_t length;
-} rpc_t;
-
-void rpc_init(void);
-
+#ifdef __cplusplus
+extern "C"
+{
 #endif
+
+    typedef enum
+    {
+        RPC_READ_COMMAND,
+        RPC_READ_DATA,
+        RPC_EXEC,
+    } rpc_state_t;
+
+    typedef struct
+    {
+        char code;
+        uint32_t address;
+        uint8_t length;
+    } rpc_t;
+
+    void rpc_init(void);
+
+#ifdef __cplusplus
+}
+#endif
+
+#endif // __RPC_HAL_H_

@@ -1,0 +1,32 @@
+[
+  {
+    "arguments": [
+      "/usr/bin/g++",
+      "-c",
+      "-std=c++23",
+      "-fPIC",
+      "-I/usr/include/x86_64-linux-gnu/qt6",
+      "-I/usr/lib/qt6",
+      "-DSIMULATOR",
+      "-Iboard/inc",
+      "-Iapp/inc",
+      "-Iutils/inc",
+      "-Idata/inc",
+      "-Ihal",
+      "-Ithirdparty/littlefs",
+      "-Isimulator/inc",
+      "-Og",
+      "-Wall",
+      "-Wextra",
+      "-fdata-sections",
+      "-ffunction-sections",
+      "-Wa,-a,-ad,-alms=build/simulator.lst",
+      "-o",
+      "build/simulator.s",
+      "simulator/src/simulator.cpp"
+    ],
+    "directory": "/home/austen/datacrypt",
+    "file": "/home/austen/datacrypt/simulator/src/simulator.cpp",
+    "output": "/home/austen/datacrypt/build/simulator.s"
+  }
+]

@@ -19,7 +19,7 @@ void words_get(uint32_t index, word_t* storage) {
     // Words are 16 byte aligned structures
     if (index < num_words) {
         if (NULL != storage) {
-            file_seek((index * MAX_WORD_LENGTH) + sizeof(uint32_t));
+            file_aseek((index * MAX_WORD_LENGTH) + sizeof(uint32_t));
             file_read(storage, MAX_WORD_LENGTH);
         }
     }

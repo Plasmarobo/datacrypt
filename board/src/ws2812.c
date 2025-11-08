@@ -5,6 +5,8 @@
 #include <string.h>
 
 #include "bsp.h"
+#include "gpio.h"
+#include "leds.h"
 
 // WS2812 requires 1.25us timing +- 600ns
 // HIGH pattern: 0.35us HIGH, 0.7us LOW
@@ -89,7 +91,6 @@ const uint32_t WS_RST = 0x0;
 #if defined(ENABLE_GAMMA_CORRECTION)
 /* I disagree with 6.7.9p11 in this context */
 #pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-W"
 static const uint8_t gamma8[] = {
     0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,
     0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   1,   1,

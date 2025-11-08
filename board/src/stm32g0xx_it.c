@@ -23,6 +23,8 @@
 #include "adc.h"
 #include "bsp.h"
 #include "i2c.h"
+#include "serial.h"
+#include "leds.h"
 #include "scheduler.h"
 
 #define GPIO_DEBOUNCE_US (25)

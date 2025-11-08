@@ -1,5 +1,5 @@
 #define CATCH_CONFIG_MAIN
-#include <catch_amalgamated.hpp>
+#include "catch_amalgamated.hpp"
 
 #include "scheduler.h"
 

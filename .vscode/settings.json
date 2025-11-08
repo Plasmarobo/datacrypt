@@ -1,8 +1,13 @@
 {
-    "C_Cpp.default.compilerPath": "cl.exe",
-    "C_Cpp.default.configurationProvider": "ms-vscode.makefile-tools",
+    "C_Cpp.errorSquiggles": "enabled",
+    "editor.defaultFormatter": "ms-vscode.cpptools",
+    "C_Cpp.default.intelliSenseMode": "gcc-arm",
     "files.associations": {
+        "game.h": "c",
+        "defs.h": "c",
         "scheduler.h": "c",
-        "flash.h": "c"
-    }
+        "stm32g0xx_hal.h": "c"
+    },
+    "C_Cpp.default.compilerPath": "/usr/bin/arm-none-eabi-gcc",
+    "makefile.configureOnOpen": true,
 }

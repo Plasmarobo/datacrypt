@@ -1,10 +1,13 @@
 
 #include "top_level_states.h"
 
-#include "bsp.h"
 #include "fsm.h"
+#include "states.h"
+#include "events.h"
 #include "game.h"
 #include "scheduler.h"
+#include "display.h"
+#include "leds.h"
 
 #define APP_UPDATE_PERIOD_MS (100)
 
@@ -16,41 +19,42 @@ static void select_game(int32_t value);
 static void start(int32_t value);
 
 STATE_ENTER(app_fsm, mode_select) {
-    display_clear_all();
-
-    gpio_set_callback(LOCK0_TGL, &select_test);
-    gpio_set_callback(LOCK1_TGL, &select_game);
-    gpio_set_callback(LOCK3_TGL, &start);
+    disp_clear_all();
+    event_clear_all();
+    ON_LOCK0(&select_test);
+    ON_LOCK1(&select_game);
+    ON_LOCK3(&start);
 };
+
 STATE_UPDATE(app_fsm, mode_select) {
     // Selection hierarchy
-    display_clear_all();
+    disp_clear_all();
     if (selection & 0x02) {
         // Game selected
         display_set_inverted(true, NULL);
-        display_set_text(1, 1, "GAME", 4);
+        draw_text(1, 1, "GAME", 4);
         display_set_inverted(false, NULL);
-        display_set_text(1, 1, "test", 4);
-        display_set_text(1, 1, "START", 5);
+        draw_text(1, 1, "test", 4);
+        draw_text(1, 1, "START", 5);
     } else if (selection & 0x01) {
         // Test selected
         display_set_inverted(false, NULL);
-        display_set_text(1, 1, "game", 4);
+        draw_text(1, 1, "game", 4);
         display_set_inverted(true, NULL);
-        display_set_text(1, 1, "TEST", 4);
-        display_set_text(1, 1, "START", 5);
+        draw_text(1, 1, "TEST", 4);
+        draw_text(1, 1, "START", 5);
     } else {
         // Nothing selected
         display_set_inverted(false, NULL);
         display_set_inverted(false, NULL);
-        display_set_text(1, 1, "game", 4);
-        display_set_text(1, 1, "test", 4);
+        draw_text(1, 1, "game", 4);
+        draw_text(1, 1, "test", 4);
     }
 };
 STATE(app_fsm, mode_select, enter, update);
 STATE_ENTER(app_fsm, test) {
     // Clear displays, clear leds
-    display_clear_all();
+    disp_clear_all();
     set_disp((color_t[]){
         {255, 0, 0},
         {0, 255, 0},
@@ -78,7 +82,7 @@ STATE_ENTER(app_fsm, test) {
         {0, 255, 0},
     });
     for (uint8_t i = 0; i < DISPLAY_MAX; ++i) {
-        display_set_text(2, 2, "test pattern", 12);
+        draw_text(2, 2, "test pattern", 12);
     }
 };
 STATE(app_fsm, test, enter);
@@ -99,12 +103,10 @@ static void select_game(int32_t value) {
 };
 static void start(int32_t value) {
     if (selection & 0x02) {
-        // FSM_SET_STATE(app_fsm, game);
+        fsm_set_state(NULL, STATEREF(app_fsm, mode_select));
     } else if (selection & 0x01) {
         fsm_set_state(NULL, STATEREF(app_fsm, test));
     }
 };
 
-static void app_task(int32_t status) { fsm_update(STATEREF(app_fsm, test)); }
-
-void app_init() { task_periodic(&app_task, MILLIS(APP_UPDATE_PERIOD_MS)); }
+static uint32_t app_micros;

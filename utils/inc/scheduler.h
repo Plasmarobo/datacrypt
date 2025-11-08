@@ -8,6 +8,7 @@ extern "C" {
 #endif
 
 #include "defs.h"
+#include "dyn_macro.h"
 
 // What is the maximum slice to execute a thread or task
 #define SCHEDULE_TIMESLICE_US (1)
@@ -63,6 +64,19 @@ void scheduler_freerun();  // Will not return
 callback_t future_get();
 // Pumps scheduler, returns when the future completes
 int32_t future_await(callback_t awaited_future, timespan_t timeout);
+// These two global symbols allow simple future access
+extern callback_t default_future;
+extern int32_t default_status;
+
+#define DEFAULT_FUTURE_TIMEOUT (MILLIS(1000))
+
+// Variadic await
+#define AWAIT(...) DMACRO(AWAIT, __VA_ARGS__)
+// Await specifiers
+#define AWAIT1(fn) AWAIT2(fn, default_status)
+#define AWAIT2(fn, status) AWAIT3(fn, status, DEFAULT_FUTURE_TIMEOUT)
+#define AWAIT3(fn, status, timeout) default_future = future_get(); AWAIT4(fn, status, timeout, default_future)
+#define AWAIT4(fn, status, timeout, future) fn; status = future_await(future,timeout)
 
 #ifdef __cplusplus
 }

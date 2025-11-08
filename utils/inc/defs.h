@@ -7,6 +7,12 @@
 extern "C" {
 #endif
 
+#ifdef INTELLISENSE
+#define __attribute__(x)
+#endif
+
+#define STATUS_OK (0)
+
 #define CONCAT(x, y) x##y
 #define CONCATSTR(X, Y) CONCAT(#X, #Y)
 #define TRICAT(x, y, z) x##y##z

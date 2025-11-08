@@ -26,6 +26,9 @@
 /* Includes ------------------------------------------------------------------*/
 #include "stm32g0xx.h"
 
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 /* Exported types ------------------------------------------------------------*/
 /* Exported constants --------------------------------------------------------*/
@@ -33,6 +36,10 @@
 /* Exported functions ------------------------------------------------------- */
 uint8_t ADPCM_Encode(int32_t sample);
 int16_t ADPCM_Decode(uint8_t code);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* __ADPCM_H*/
 /******************* (C) COPYRIGHT 2009 STMicroelectronics *****END OF FILE****/

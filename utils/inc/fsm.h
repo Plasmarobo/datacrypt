@@ -20,26 +20,26 @@ typedef struct {
 
 // clang-format off
 
-#define STATE_ENTER(fsm,name) static void TRICAT(fsm,name,_enter)(void)
-#define STATE_UPDATE(fsm,name) static void TRICAT(fsm,name,_update)(void)
-#define STATE_EXIT(fsm,name) static void TRICAT(fsm,name,_exit)(void)
+#define STATE_ENTER(fsm,name) void TRICAT(fsm,name,_enter)(void)
+#define STATE_UPDATE(fsm,name) void TRICAT(fsm,name,_update)(void)
+#define STATE_EXIT(fsm,name) void TRICAT(fsm,name,_exit)(void)
 
 #define STATE_1_ARG(fsm,name,enter) \
-static state_t CONCAT(fsm,name) = { \
+state_t CONCAT(fsm,name) = { \
     &TRICAT(fsm,name,_enter), \
     NULL, \
     NULL, \
 }
 
 #define STATE_2_ARG(fsm,name,enter,update) \
-static state_t CONCAT(fsm,name) = { \
+state_t CONCAT(fsm,name) = { \
     &TRICAT(fsm,name,_enter), \
     &TRICAT(fsm,name,_update), \
     NULL, \
 }
 
 #define STATE_3_ARG(fsm,name,enter,update,exit) \
-static state_t CONCAT(fsm,name) = { \
+state_t CONCAT(fsm,name) = { \
     &TRICAT(fsm,name,_enter), \
     &TRICAT(fsm,name,_update), \
     &TRICAT(fsm,name,_exit), \
@@ -50,7 +50,8 @@ static state_t CONCAT(fsm,name) = { \
 STATE_EXTRACT_ARG(__VA_ARGS__, STATE_3_ARG, STATE_2_ARG, STATE_1_ARG, )
 
 #define STATE(fsm, name, ...) STATE_FLEX(__VA_ARGS__)(fsm, name, __VA_ARGS__)
-#define DECLARESTATE(fsm,name) static state_t CONCAT(fsm,name);
+#define LOCALSTATE(fsm,name) static state_t CONCAT(fsm,name);
+#define EXPORTSTATE(fsm,name) extern state_t CONCAT(fsm,name);
 
 #define STATENAME(fsm,name) CONCAT(fsm,name)
 #define STATEREF(fsm,name) (void*)&STATENAME(fsm,name)

@@ -1,6 +1,10 @@
 #ifndef FLASH_H
 #define FLASH_H
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #define FLASH_SUCCESS (0)
 #define FLASH_ERR_TIMEOUT (-1)
 #define FLASH_ERR_BUSY (-2)
@@ -28,5 +32,9 @@
 #define PAGE_OFFSET(offset) (offset / PAGE_SIZE)
 
 #define OOB_BASE_ADDRESS (PAGE_SIZE)
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif // FLASH_H

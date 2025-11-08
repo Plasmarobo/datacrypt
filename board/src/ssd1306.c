@@ -7,8 +7,10 @@
 #include "fsm.h"
 #include "i2c.h"
 #include "images.h"
+#include "display.h"
 #include "ringbuffer.h"
 #include "scheduler.h"
+#include "draw.h"
 
 // Eight bit address 0111 10--,  bit 1 is data/cmd, bit 0 is r/w
 #define DISPLAY_ADDRESS_DATA (0x3D)
@@ -95,15 +97,13 @@ static void display_page(callback_t oncomplete);
 static void display_command(length_t arg_len, callback_t oncomplete);
 static void next_state(int32_t status);
 static void update_state(int32_t status);
-;
-static void draw_pixel(uint16_t x, uint16_t y, uint8_t value);
-static void draw_rect(uint16_t x, uint16_t y, uint16_t w, uint16_t h);
+
 static uint8_t get_height() { return ((selected_display % 2) == 0) ? 64 : 32; }
 
-DECLARESTATE(dfsm, idle);
-DECLARESTATE(dfsm, init);
-DECLARESTATE(dfsm, setup);
-DECLARESTATE(dfsm, write_display);
+LOCALSTATE(dfsm, idle);
+LOCALSTATE(dfsm, init);
+LOCALSTATE(dfsm, setup);
+LOCALSTATE(dfsm, write_display);
 
 // clang-format off
 RINGBUFFER(state_queue, state_t*, DISPLAY_STATE_STACK_DEPTH);
@@ -114,7 +114,7 @@ static void init_next(int32_t status)
     next_state(0);
 }
 
-STATE_ENTER(dfsm, init)
+static STATE_ENTER(dfsm, init)
 {
     if (selected_display < DISPLAY_MAX)
     {
@@ -135,9 +135,9 @@ STATE_ENTER(dfsm, init)
         next_state(0);
     }
 };
-STATE(dfsm,init,enter);
+static STATE(dfsm,init,enter);
 
-STATE_ENTER(dfsm,setup)
+static STATE_ENTER(dfsm,setup)
 {   
     uint8_t *cmd_ptr = command_buffer + 1;
     *cmd_ptr = CMD_SLEEP;
@@ -174,24 +174,24 @@ STATE_ENTER(dfsm,setup)
     QUEUESTATE(dfsm, write_display);
     display_command(32, next_state);
 };
-STATE(dfsm,setup,enter);
-STATE_ENTER(dfsm, write_display)
+static STATE(dfsm,setup,enter);
+static STATE_ENTER(dfsm, write_display)
 {
     display_page(update_state);
 };
-STATE_UPDATE(dfsm, write_display)
+static STATE_UPDATE(dfsm, write_display)
 {
     selected_display += 1;
     task_immediate(next_state);
 }
-STATE(dfsm, write_display, enter, update);
-STATE_ENTER(dfsm, idle) {
+static STATE(dfsm, write_display, enter, update);
+static STATE_ENTER(dfsm, idle) {
     if (NULL != user_callback)
     {
         user_callback(0);
     }
 };
-STATE(dfsm, idle, enter);
+static STATE(dfsm, idle, enter);
 // clang-format on
 
 // Execute the current state without popping anything off the stack
@@ -221,7 +221,7 @@ void display_init(callback_t on_init) {
     display_mux_enable();
     display_clear();
     memset(framebuffer, 0xFF, 128);
-    display_blit(0, 0, img_millibyte_alt_cropped, 128, 32);
+    draw_blit(0, 0, img_millibyte_alt_cropped, 128, 32);
     QUEUESTATE(dfsm, init);
     task_delayed(next_state, MILLIS(MUX_ENABLE_DELAY_MS));
 }
@@ -266,81 +266,27 @@ static void display_page(callback_t on_complete) {
     start_transaction(data_buffer, DISPLAY_FRAMEBUFFER_DEPTH + 1, on_complete);
 }
 
-static void draw_rect(uint16_t x, uint16_t y, uint16_t w, uint16_t h) {
-    // Slow method
-    for (uint16_t i = x; i < x + w; ++i) {
-        for (uint16_t j = y; j < y + h; ++j) {
-            draw_pixel(i, j, 0x01);
-        }
-    }
-}
-
-void display_char(uint8_t x, uint8_t y, unsigned char c, uint8_t sx,
-                  uint8_t sy) {
-    for (uint8_t i = 0; i < 5; ++i) {
-        uint8_t line = font[c * 5 + i];
-        for (uint8_t j = 0; j < 8; j++, line >>= 1) {
-            if (line & 0x01) {
-                if (sx == 1 && sy == 1) {
-                    draw_pixel(x + i, y + j, 0x01);
-                } else {
-                    draw_rect(x + i * sx, y + j * sy, sx, sy);
-                }
-            }
-        }
-    }
-}
-
-void display_set_text(uint8_t x, uint8_t y, const char* text, length_t length) {
-    const uint8_t scale = 2;
-    for (uint8_t i = 0; i < length; ++i) {
-        // Font is 6x8 (padding included)
-        display_char(x + (6 * i * scale), y, (uint8_t)text[i], scale, scale);
-    }
-}
-
-void display_set_inverted(bool inv, callback_t oncomplete) {
+void display_set_inverted(bool inv, callback_t oncomplete)
+{
     command_buffer[1] = inv ? CMD_INVERTED_MODE : CMD_NONINVERTED_MODE;
     display_command(2, oncomplete);
 }
 
-void display_show(uint8_t display, callback_t oncomplete) {
+void display_show(uint8_t display, callback_t oncomplete)
+{
     user_callback = oncomplete;
     QUEUESTATE(dfsm, write_display);
     display_select(display, next_state);
 }
 
-static void draw_pixel(uint16_t x, uint16_t y, uint8_t value) {
+void display_pixel(uint16_t x, uint16_t y, uint8_t value)
+{
     const uint8_t fb_w = 128;
     if ((x < fb_w) || (y < get_height())) {
         if (value) {
             framebuffer[((y / 8) * fb_w) + x] |= (0x01 << (y & 7));
         } else {
             framebuffer[((y / 8) * fb_w) + x] &= ~(0x01 << (y & 7));
-        }
-    }
-}
-
-// Copy data into framebuffer
-// Incoming image is a flat array that can be index as (x) + (h * y)
-void display_blit(uint8_t x, uint8_t y, const buffer_t img, uint8_t width,
-                  uint8_t height) {
-    // Clamp W and H to edges of display
-    const uint8_t fb_w = 128;
-    const uint8_t fb_h = get_height();
-    uint8_t cw = width;
-    uint8_t ch = height;
-    if (x + width > fb_w) {
-        cw = fb_w - x;
-    }
-    if (y + height > fb_h) {
-        ch = fb_h - y;
-    }
-    for (uint16_t j = 0; j < ch; ++j) {
-        for (uint16_t i = 0; i < cw; ++i) {
-            draw_pixel(
-                x + i, y + j,
-                img[(j * (width / 8)) + (i / 8)] & (0x1 << (7 - (i % 8))));
         }
     }
 }

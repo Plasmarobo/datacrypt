@@ -3,6 +3,7 @@
 #include <stdarg.h>
 #include <stdbool.h>
 #include <stdint.h>
+#include <stdio.h>
 
 #define DEBUG_DISPLAY (0)
 
@@ -11,6 +12,7 @@ static bool d_ = true;
 static bool dready(int32_t status) {
     // signal
     d_ = true;
+    return d_;
 }
 
 void dbgprintf(const char* fmt, ...) {
@@ -23,7 +25,7 @@ void dbgprintf(const char* fmt, ...) {
 
 #ifdef ENABLE_DEBUG_DISPLAY
     display_clear();
-    display_set_text(0, 0, buffer, strlen(buffer));
+    draw_text(0, 0, buffer, strlen(buffer));
     if (d_) {
         d_ = false;
         display_show(DEBUG_DISPLAY, dready);

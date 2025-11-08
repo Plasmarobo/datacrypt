@@ -25,6 +25,8 @@
 extern "C" {
 #endif
 
+#include <stdint.h>
+
 /* Includes ------------------------------------------------------------------*/
 #include "stm32g0xx_hal_conf.h"
 
