@@ -5,11 +5,14 @@
 #include <stdint.h>
 #include <stdio.h>
 
+#include "serial.h"
+
 #define DEBUG_DISPLAY (0)
 
 static bool d_ = true;
 
 static bool dready(int32_t status) {
+    UNUSED(status);
     // signal
     d_ = true;
     return d_;

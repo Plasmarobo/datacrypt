@@ -40,6 +40,7 @@ uint8_t display_get_selected()
 
 void display_set_inverted(bool inv, callback_t oncomplete)
 {
+    UNUSED(inv);
     // Not implemented, should be a property of the display
     uint8_t buffer[128 * 64 / 8];
     SimulatorImageProvider::getInstance()->readDisplay(display_index, buffer, 128, get_height());
@@ -48,6 +49,7 @@ void display_set_inverted(bool inv, callback_t oncomplete)
         buffer[i] = ~buffer[i];
     }
     SimulatorImageProvider::getInstance()->writeDisplay(display_index, buffer, 128, get_height());
+    oncomplete(0);
 }
 
 void display_clear()

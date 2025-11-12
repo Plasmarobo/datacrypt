@@ -20,7 +20,7 @@ PLATFORM ?= stm32
 # building variables
 ######################################
 # debug build?
-DEBUG ?= 1
+DEBUG ?= 0
 # optimization
 
 #######################################
@@ -40,8 +40,7 @@ C_INCLUDES = \
 -Iapp/inc \
 -Iutils/inc \
 -Idata/inc \
--Ihal \
--Ithirdparty/littlefs
+-Ihal
  
 #######################################
 # CFLAGS
@@ -77,12 +76,12 @@ HEX = $(CP) -O ihex
 BIN = $(CP) -O binary -S
 
 # compile gcc flags
-ASFLAGS += $(AS_DEFS) $(AS_INCLUDES) $(OPT) -Wall -Wextra -fdata-sections -ffunction-sections
+COMMON_FLAGS = -MMD -MP -MF$(@:%.o=%.d) -Wall -Wextra $(OPT) -ffunction-sections -fdata-sections
+ASFLAGS += $(AS_DEFS) $(AS_INCLUDES) $(COMMON_FLAGS)
 
-CFLAGS += $(C_DEFS) $(C_INCLUDES) $(OPT) -Wall -Wextra -fdata-sections -ffunction-sections
-CXXFLAGS += $(C_DEFS) $(CXX_DEFS) $(C_INCLUDES) $(CXX_INCLUDES) $(OPT) -Wall -Wextra -fdata-sections -ffunction-sections
+CFLAGS += $(C_DEFS) $(C_INCLUDES) -std=c11
+CXXFLAGS += $(CXX_DEFS) $(CXX_INCLUDES) $(C_INCLUDES) $(C_DEFS) -std=c++23
 # Generate dependency information
-CFLAGS += -MMD -MP -MF"$(@:%.o=%.d)" -std=c11
 LIBDIR = -L$(BUILD_DIR)
 
 .PHONY: all test
@@ -106,14 +105,18 @@ vpath %.s $(sort $(dir $(ASM_SOURCES)))
 OBJECTS += $(addprefix $(BUILD_DIR)/,$(notdir $(CXX_SOURCES:.cpp=.o)))
 vpath %.cpp $(sort $(dir $(CXX_SOURCES)))
 
-$(BUILD_DIR)/%.o: %.c Makefile | $(BUILD_DIR) 
-	$(CC) -c $(CFLAGS) -Wa,-a,-ad,-alms=$(BUILD_DIR)/$(notdir $(<:.c=.lst)) $< -o $@
+$(info $(ASM_SOURCES))
 
-$(BUILD_DIR)/%.s: %.cpp Makefile | $(BUILD_DIR)
-	$(CXX) -c $(CXXFLAGS) -Wa,-a,-ad,-alms=$(BUILD_DIR)/$(notdir $(<:.cpp=.lst)) $< -o $@
+$(info $(OBJECTS))
+
+$(BUILD_DIR)/%.o: %.c Makefile | $(BUILD_DIR) 
+	$(CC) -c $(CFLAGS) $(COMMON_FLAGS) -Wa,-a,-ad,-alms=$(BUILD_DIR)/$(notdir $(<:.c=.lst)) $< -o $@
+
+$(BUILD_DIR)/%.o: %.cpp Makefile | $(BUILD_DIR)
+	$(CXX) -c $(CXXFLAGS) $(COMMON_FLAGS) -Wa,-a,-ad,-alms=$(BUILD_DIR)/$(notdir $(<:.cpp=.lst)) $< -o $@
 
 $(BUILD_DIR)/%.o: %.s Makefile | $(BUILD_DIR)
-	$(AS) -c $(CFLAGS) $< -o $@
+	$(AS) -c $(CFLAGS) $(COMMON_FLAGS) $< -o $@
 
 $(BUILD_DIR)/$(TARGET).elf: $(OBJECTS) Makefile
 	$(CC) $(OBJECTS) $(LDFLAGS) -o $@

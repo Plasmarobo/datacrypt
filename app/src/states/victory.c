@@ -4,6 +4,7 @@
 
 static void finish(int32_t status)
 {
+    UNUSED(status);
     set_state(STATEREF(game, menu));
 }
 

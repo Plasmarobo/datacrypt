@@ -16,7 +16,7 @@ extern "C"
 #define COUNTER_LENGTH (4)
 #define TIMER_OFFSET (12)
 #define TIMER_LENGTH (6)
-#define LED_COUNT (18)
+#define LED_COUNT (DISPLED_STATUS_LENGTH + (2 * COUNTER_LENGTH) + TIMER_LENGTH)
 
     typedef struct
     {

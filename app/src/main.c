@@ -7,6 +7,10 @@
 #include "scheduler.h"
 #include "rpc.h"
 #include "filesystem.h"
+#include "serial.h"
+#include "display.h"
+#include "leds.h"
+#include "random.h"
 
 int main() {
     // HW init
@@ -19,7 +23,7 @@ int main() {
     random_init();
     leds_init();
     display_init(game_init);
-    serial_write("\r\nBOOT\r\n", 8, NULL);
+    serial_write((const buffer_t) "\r\nBOOT\r\n", 8, NULL);
     filesystem_init();
     rpc_init();
     // Start exec

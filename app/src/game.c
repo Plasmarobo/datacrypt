@@ -12,6 +12,8 @@
 #include "gpio.h"
 #include "display.h"
 #include "leds.h"
+#include "draw.h"
+#include "random.h"
 
 #include "game.h"
 
@@ -109,6 +111,7 @@ static color_t blend(color_t a, color_t b, uint8_t factor)
 static callback_t on_blank = NULL;
 static void blank_displays(int32_t status)
 {
+    UNUSED(status);
     static uint8_t display_to_blank = 0;
     if (display_to_blank < DISPLAY_MAX)
     {
@@ -130,6 +133,7 @@ static callback_t timer_callback = NULL;
 
 static void timer_handler(int32_t status)
 {
+    UNUSED(status);
     timer_value_ms += TIMER_PERIOD_MS;
     if (timer_value_ms > TIMER_DURATION_MS)
     {
@@ -177,6 +181,7 @@ static void random_word(int32_t status);
 
 static void anim_handler(int32_t status)
 {
+    UNUSED(status);
     /*switch (gs) {
         default:
             break;
@@ -195,6 +200,7 @@ static void anim_handler(int32_t status)
 
 static void random_word(int32_t status)
 {
+    UNUSED(status);
     bool skip = false;
     switch (disp)
     {
@@ -246,11 +252,13 @@ static void led_handler() { leds_write(); }
 
 static void game_handler(int32_t status)
 {
+    UNUSED(status);
     update_state(0);
 }
 
 void game_init(int32_t status)
 {
+    UNUSED(status);
     set_current_team(TEAM_A);
     clear_state(STATEREF(game, splash));
     task_delayed(game_handler, MILLIS(2000));
@@ -331,7 +339,7 @@ void game_save(callback_t oncomplete)
     // game_state has two semaphors, free and valid
     while (save_index < file_capacity())
     {
-        file_read(&last_state, sizeof(game_state_t));
+        file_read((buffer_t)&last_state, sizeof(game_state_t));
         if ((!last_state.free) && (last_state.valid))
         {
             // We have an in-use, still valid chunk
@@ -346,16 +354,18 @@ void game_save(callback_t oncomplete)
                 return;
             }
             // back off to last state
-            file_rseek(-sizeof(game_state_t));
+            int32_t seek_back = -((int32_t)sizeof(game_state_t));
+            file_rseek(seek_back);
             // write-down valid flag
             last_state.valid = 0;
-            file_write(&last_state, sizeof(game_state_t));
+            file_write((buffer_t)&last_state, sizeof(game_state_t));
             break;
         }
         else if (last_state.free)
         {
             // No save data, continue to write-down (use current index)
-            file_rseek(-sizeof(game_state_t));
+            int32_t seek_back = -((int32_t)sizeof(game_state_t));
+            file_rseek(seek_back);
         }
         else
         {
@@ -373,20 +383,20 @@ void game_save(callback_t oncomplete)
     // Set valid flag
     last_state.free = 0;
     last_state.valid = 1;
-    file_write(&last_state, sizeof(game_state_t));
+    file_write((buffer_t)&last_state, sizeof(game_state_t));
     oncomplete(STATUS_OK);
 }
 
 void game_load(callback_t oncomplete)
 {
-    static uint32_t save_index = 0;
+    static int32_t save_index = 0;
     // Write down current game
     game_state_t last_state;
     file_open(GAME_DB);
     // game_state has two semaphors, free and valid
     while (save_index < file_capacity())
     {
-        file_read(&last_state, sizeof(game_state_t));
+        file_read((buffer_t)&last_state, sizeof(game_state_t));
         if ((!last_state.free) && (last_state.valid))
         {
             // We have an in-use, still valid chunk

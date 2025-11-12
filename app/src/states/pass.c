@@ -6,6 +6,7 @@
 
 static void ready(int32_t status)
 {
+    UNUSED(status);
     if (gpio_get(LOCK3_TGL))
     {
         set_state(STATEREF(game, turn));

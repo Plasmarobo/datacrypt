@@ -1,6 +1,10 @@
 #include "states.h"
 #include "scheduler.h"
 #include "events.h"
+#include <string.h>
+#include "display.h"
+#include "draw.h"
+#include "game.h"
 
 static void start_new(int32_t status);
 static void resume(int32_t status);
@@ -21,22 +25,26 @@ static menu_item_t menu[] = {
 
 static void start_new(int32_t status)
 {
+    UNUSED(status);
     game_new();
     set_state(STATEREF(game, word_select));
 }
 
 static void resume(int32_t status)
 {
+    UNUSED(status);
     set_state(STATEREF(game, load));
 }
 
 static void settings(int32_t status)
 {
+    UNUSED(status);
     set_state(STATEREF(game, settings));
 }
 
 static void select_next(int32_t status)
 {
+    UNUSED(status);
     selected_item += 1;
     if (selected_item >= sizeof(menu) / sizeof(menu_item_t))
     {
@@ -45,6 +53,7 @@ static void select_next(int32_t status)
 }
 static void select_prev(int32_t status)
 {
+    UNUSED(status);
     selected_item -= 1;
     if (selected_item < 0)
     {
@@ -54,6 +63,7 @@ static void select_prev(int32_t status)
 
 static void confirm_selection(int32_t status)
 {
+    UNUSED(status);
     if ((selected_item < sizeof(menu) / sizeof(menu_item_t)) &&
         (menu[selected_item].on_selected != NULL))
     {

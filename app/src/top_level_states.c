@@ -8,6 +8,7 @@
 #include "scheduler.h"
 #include "display.h"
 #include "leds.h"
+#include "draw.h"
 
 #define APP_UPDATE_PERIOD_MS (100)
 
@@ -55,7 +56,7 @@ STATE(app_fsm, mode_select, enter, update);
 STATE_ENTER(app_fsm, test) {
     // Clear displays, clear leds
     disp_clear_all();
-    set_disp((color_t[]){
+    set_displed((color_t[]){
         {255, 0, 0},
         {0, 255, 0},
         {0, 0, 255},
@@ -102,11 +103,10 @@ static void select_game(int32_t value) {
     }
 };
 static void start(int32_t value) {
+    UNUSED(value);
     if (selection & 0x02) {
         fsm_set_state(NULL, STATEREF(app_fsm, mode_select));
     } else if (selection & 0x01) {
         fsm_set_state(NULL, STATEREF(app_fsm, test));
     }
 };
-
-static uint32_t app_micros;

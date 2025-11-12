@@ -24,7 +24,6 @@
 // 2 MHz
 typedef uint32_t wave_t;
 
-#define LED_COUNT (DISPLED_STATUS_LENGTH + (2 * COUNTER_LENGTH) + TIMER_LENGTH)
 #define BYTES_PER_BYTE (3)
 #define RST_BYTES (19)
 #define CODEPOINT_PITCH (BYTES_PER_BYTE * 3)

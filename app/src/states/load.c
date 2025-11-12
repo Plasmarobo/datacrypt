@@ -1,5 +1,6 @@
 #include "game.h"
 #include "states.h"
+#include "debug.h"
 
 static void on_load(int32_t status)
 {

@@ -34,7 +34,7 @@ extern "C" {
 #include "defs.h"
 #include "hal.h"
 #include "gpio.h"
-#include "stm32g0xx_hal.h"
+#include "stm32g0xx.h"
 
     /* Private includes ----------------------------------------------------------*/
     /* USER CODE BEGIN Includes */
@@ -105,6 +105,8 @@ extern "C" {
     void flash_erase(uint32_t addr, callback_t on_complete);
     void flash_tx_complete_handler(int32_t status);
     void flash_rx_complete_handler(int32_t status);
+    void serial_tx_complete_handler(int32_t status);
+    void serial_rx_complete_handler(int32_t status);
 
     /* USER CODE END Private defines */
 

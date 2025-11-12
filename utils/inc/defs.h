@@ -1,15 +1,20 @@
 #ifndef DEF_H
 #define DEF_H
 
-#include <stdint.h>
-
 #ifdef __cplusplus
+#include <cstddef>
+#include <cstdint>
 extern "C" {
+#else
+#include <stddef.h>
+#include <stdint.h>
 #endif
 
 #ifdef INTELLISENSE
 #define __attribute__(x)
 #endif
+
+#define UNUSED(x) (void)(x)
 
 #define STATUS_OK (0)
 

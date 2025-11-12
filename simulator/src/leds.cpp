@@ -3,6 +3,8 @@
 
 #include <array>
 #include <iostream>
+#include <iterator>
+#include <algorithm>
 
 static std::array<color_t, LED_COUNT> _leds;
 
@@ -22,6 +24,7 @@ bool leds_busy(void)
 }
 void leds_tx_complete_handler(int32_t status)
 {
+    UNUSED(status);
 }
 void leds_error_handler(int32_t status)
 {
@@ -30,7 +33,7 @@ void leds_error_handler(int32_t status)
 
 void leds_set(uint32_t offset, uint8_t size, color_t *color)
 {
-    std::copy(std::begin(color), std::end(color + size), _leds.begin() + offset);
+    std::copy(color, color + size, _leds.begin() + offset);
 }
 // convenience functions
 void set_displed(color_t color[DISPLED_STATUS_LENGTH])
@@ -39,18 +42,18 @@ void set_displed(color_t color[DISPLED_STATUS_LENGTH])
 }
 void set_counter0(color_t color[COUNTER_LENGTH])
 {
-    leds_set(COUNTER_0_OFFSET, COUNTER_0_LENGTH, color);
+    leds_set(COUNTER_0_OFFSET, COUNTER_LENGTH, color);
 }
 void set_counter1(color_t color[COUNTER_LENGTH])
 {
-    leds_set(COUNTER_1_OFFSET, COUNTER_1_LENGTH, color);
+    leds_set(COUNTER_1_OFFSET, COUNTER_LENGTH, color);
 }
 void set_timer(color_t color[TIMER_LENGTH])
 {
     leds_set(TIMER_OFFSET, TIMER_LENGTH, color);
 }
 
-color_t[LED_COUNT] _host_led_get()
+color_t *_host_led_get()
 {
-    return _leds.data;
+    return _leds.data();
 }

@@ -45,12 +45,13 @@ CPU = -mcpu=cortex-m0plus
 # NONE for Cortex-M0/M0+/M3
 
 # float-abi
+FLOAT_ABI= -mfloat-abi=soft
 
 # mcu
-MCU = $(CPU) -mthumb $(FPU) $(FLOAT-ABI)
+MCU = $(CPU) -mthumb $(FPU) $(FLOAT_ABI)
 
 ASFLAGS = $(MCU)
-CFLAGS = $(MCU)
+CFLAGS = $(MCU) --specs=nano.specs
 
 OPT = -Os
 
@@ -77,4 +78,4 @@ LDSCRIPT = STM32G030C8Tx_FLASH.ld
 
 # libraries
 LIBS = -lc -lm -lnosys
-LDFLAGS = $(MCU) -specs=nano.specs -T$(LDSCRIPT) $(LIBDIR) $(LIBS) -Wl,-Map=$(BUILD_DIR)/$(TARGET).map,--cref -Wl,--gc-sections
+LDFLAGS = -static --specs=nano.specs $(MCU) -T$(LDSCRIPT) $(LIBDIR) $(LIBS) -Wl,-Map=$(BUILD_DIR)/$(TARGET).map,--cref -Wl,--gc-sections

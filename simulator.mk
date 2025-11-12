@@ -19,7 +19,7 @@ MOC_DIR := $(BUILD_DIR)/moc
 
 ASFLAGS =
 CFLAGS = 
-CXXFLAGS = -std=c++23 -fPIC $(QT_INCLUDE)
+CXXFLAGS = $(QT_INCLUDE)
 
 ifeq ($(DEBUG), 1)
 CFLAGS += -g
@@ -45,8 +45,8 @@ Q_SOURCES += $(shell find ui -name '*.qml')
 
 # libraries
 LIBS = -lc -lm
-LDFLAGS = $(LIBDIR) $(LIBS) -Wl,-Map=$(BUILD_DIR)/$(TARGET).map,--cref -Wl,--gc-sections
-LDFLAGS += -L$(QT_DIR) -lQt6Gui -lQt6Core
+LDFLAGS = $(LIBDIR) $(LIBS) -Wl,-Map=$(BUILD_DIR)/$(TARGET).map,--cref 
+LDFLAGS += -L$(QT_DIR) -lQt6Gui -lQt6Core -lstdc++ -lm -lc -lgcc_s -lgcc
 
 INCLUDE := -I$(QT_DIR)/qt6 -I$(QT_DIR)/qt6/QtQuick -I$(QT_DIR)/qt6/QtQuick.2 -I$(QT_DIR)/qt6/QtGui
 

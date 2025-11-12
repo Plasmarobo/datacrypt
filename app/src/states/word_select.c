@@ -4,6 +4,7 @@
 #include "events.h"
 #include "fsm.h"
 #include "gpio.h"
+#include "random.h"
 
 #include <stdint.h>
 #include <string.h>
@@ -19,6 +20,7 @@ static const char *message_override = NULL;
 
 static void clear_popup(int32_t status)
 {
+    UNUSED(status);
     message_override = NULL;
 }
 
@@ -30,6 +32,7 @@ static void popup(const char *msg)
 
 static void try_confirm(int32_t status)
 {
+    UNUSED(status);
     bool all_locked = (IS_LOCKED(LOCK0_TGL)) &&
                       (IS_LOCKED(LOCK1_TGL)) &&
                       (IS_LOCKED(LOCK2_TGL)) &&
@@ -53,6 +56,7 @@ static void try_confirm(int32_t status)
 };
 static void rotate_words(int32_t status)
 {
+    UNUSED(status);
     if (!IS_LOCKED(LOCK0_TGL))
     {
         words_get(random_int() % words_count(), &working_list.words[0]);

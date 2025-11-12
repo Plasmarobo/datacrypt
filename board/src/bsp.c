@@ -762,6 +762,8 @@ static callback_t serial_rxcomplete = NULL;
 static callback_t serial_txcomplete = NULL;
 static bool serial_lock = false;
 
+void serial_init() {}
+
 void serial_read(buffer_t dest, length_t length, callback_t oncomplete) {
     serial_rxcomplete = oncomplete;
     HAL_UART_Receive_IT(&huart1, dest, length);
@@ -779,20 +781,16 @@ void serial_write(const buffer_t data, length_t length, callback_t oncomplete) {
 
 void serial_print(const char* str) { serial_write(str, strlen(str), NULL); }
 
-#define MAX_SERIAL_PACKET (256)
-static char print_buffer[MAX_SERIAL_PACKET];
-
 void serial_printf(const char* fmt, ...) {
+
     va_list args;
     va_start(args, fmt);
-    vsnprintf(print_buffer, MAX_SERIAL_PACKET, fmt, args);
+    generic_vprintf(serial_write, fmt, args);
     va_end(args);
-    serial_write(print_buffer, strlen(print_buffer), NULL);
 }
 
 void vserial_printf(const char* fmt, va_list args) {
-    vsnprintf(print_buffer, MAX_SERIAL_PACKET, fmt, args);
-    serial_write(print_buffer, strlen(print_buffer), NULL);
+    generic_vprintf(serial_write, fmt, args);
 }
 
 void serial_tx_complete_handler(int32_t status) {

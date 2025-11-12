@@ -1,17 +1,18 @@
 #include "defs.h"
 #include "filesystem.h"
 
-#include <sstream>
+#include <unistd.h>
+#include <fcntl.h>
+#include <string>
 
-static FILE current_file;
+static int current_file;
 
 void filesystem_init() {}
 
 void file_open(const char *path)
 {
-    std::stringstream ss;
-    ss << "./data" << path;
-    current_file = fopen(ss.str().c_str(), "r+");
+    std::string sim_path = std::string("./data") + std::string(path);
+    current_file = open(sim_path.c_str(), O_RDWR | O_CREAT);
 }
 
 size_t file_read(buffer_t dest, size_t size)
@@ -22,22 +23,24 @@ size_t file_write(buffer_t dest, size_t size)
 {
     return write(current_file, dest, size);
 }
+
 void file_rseek(int32_t seekv)
 {
-    fseek(current_file, seekv, SEEK_CUR);
+    lseek(current_file, seekv, SEEK_CUR);
 }
+
 void file_aseek(int32_t seekv)
 {
-    fseek(current_file, seekv, SEEK_SET);
+    lseek(current_file, seekv, SEEK_SET);
 }
 
 int32_t file_capacity() { return -1; }
 
 void file_close()
 {
-    fclose(current_file);
+    close(current_file);
 }
 void file_erase()
 {
-    return 0;
+    return;
 }

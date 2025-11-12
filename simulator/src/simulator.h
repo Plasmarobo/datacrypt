@@ -9,6 +9,9 @@
 
 class SimulatorImageProvider : public QQuickImageProvider
 {
+signals:
+    void imageChanged();
+
 private:
     QImage buffer[8];
     std::mutex mutex[8];

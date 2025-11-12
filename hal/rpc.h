@@ -20,6 +20,7 @@
 #define RPC_STATUS_BUSY (1)
 #define RPC_STATUS_ERR_EXEC (2)
 #define RPC_STATUS_ERR_ARG (3)
+#define RPC_STATUS_ERR_IMPL (4)
 
 #ifdef __cplusplus
 extern "C"

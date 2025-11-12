@@ -6,6 +6,7 @@
 #include <QtQuick/QQuickView>
 #include <QtGui/QImage>
 #include <QtQuick/QQuickImageProvider>
+#include <QtWidgets/QApplication>
 
 #include "simulator.h"
 
@@ -31,6 +32,7 @@ SimulatorImageProvider::SimulatorImageProvider() : QQuickImageProvider(QQuickIma
 
 QImage SimulatorImageProvider::requestImage(const QString &id, QSize *size, const QSize &requestedSize)
 {
+    UNUSED(requestedSize);
     QImage image;
     QString big_prefix = "image://SimulatorImageProvider/display_big_";
     QString small_prefix = "image://SimulatorImageProvider/display_small_";
@@ -91,7 +93,9 @@ SimulatorImageProvider *SimulatorImageProvider::getInstance()
 
 void hal_worker()
 {
-    QApplication app(0, NULL);
+    int argc = 0;
+    char *argv[1] = {NULL};
+    QApplication app(argc, argv);
     qmlRegisterType<SimulatorImageProvider>("SimulatorImageProvider", 1, 0, "SimulatorImageProvider");
 
     // Using QQuickView
@@ -100,7 +104,7 @@ void hal_worker()
     engine->addImageProvider(QLatin1String("SimulatorImageProvider"), SimulatorImageProvider::getInstance());
     view.setSource(QUrl::fromLocalFile("ui/SimulatorUI/SimulatorUIContent/App.qml"));
     view.show();
-    QQuickItem *object = view.rootObject();
+    // QQuickItem *object = view.rootObject();
 
     app.exec();
 }
