@@ -228,7 +228,7 @@ callback_t future_get()
 // Spins until the callback resolves, moves status back into blocking context
 int32_t future_await(callback_t awaited_future, timespan_t timeout)
 {
-   
+    UNUSED(awaited_future);
     // We only support ONE future to bound the stack/scheduler depth
     timespan_t start = microseconds();
     while(NULL != future_waiting)

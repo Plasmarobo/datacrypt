@@ -43,24 +43,27 @@ void display_set_inverted(bool inv, callback_t oncomplete)
     UNUSED(inv);
     // Not implemented, should be a property of the display
     uint8_t buffer[128 * 64 / 8];
-    SimulatorImageProvider::getInstance()->readDisplay(display_index, buffer, 128, get_height());
+    SimDisplay::getInstance()->readDisplay(display_index, buffer, 128, get_height());
     for (int i = 0; i < 128 * 64 / 8; i++)
     {
         buffer[i] = ~buffer[i];
     }
-    SimulatorImageProvider::getInstance()->writeDisplay(display_index, buffer, 128, get_height());
-    oncomplete(0);
+    SimDisplay::getInstance()->writeDisplay(display_index, buffer, 128, get_height());
+    if (oncomplete)
+    {
+        oncomplete(0);
+    }
 }
 
 void display_clear()
 {
     memset(framebuffer, 0x00, 128 * 64 / 8);
-    SimulatorImageProvider::getInstance()->writeDisplay(display_index, framebuffer, 128, get_height());
+    SimDisplay::getInstance()->writeDisplay(display_index, framebuffer, 128, get_height());
 }
 
 void display_show(uint8_t display, callback_t on_complete)
 {
-    SimulatorImageProvider::getInstance()->writeDisplay(display, framebuffer, 128, get_height());
+    SimDisplay::getInstance()->writeDisplay(display, framebuffer, 128, get_height());
     on_complete(0);
 }
 

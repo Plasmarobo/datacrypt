@@ -3,38 +3,42 @@
 # binaries
 #######################################
 
-QT_DIR := /usr/lib/qt6
+QT_BIN_DIR := /usr/lib/qt6/libexec
 QT_INCLUDE_DIR = /usr/include/x86_64-linux-gnu/qt6
-QT_INCLUDE := -I$(QT_INCLUDE_DIR) -I$(QT_DIR)
+QT_LIB_DIR = /usr/lib/x86_64-linux-gnu
 PREFIX =
 
-MOC := $(QT_DIR)/libexec/moc
-RCC := $(QT_DIR)/libexec/rcc
-UIC := $(QT_DIR)/libexec/uic
-
-OBJ_DIR := $(BUILD_DIR)/objects
-APP_DIR := $(BUILD_DIR)/apps
-INC_DIR := $(BUILD_DIR)/include
-MOC_DIR := $(BUILD_DIR)/moc
+MOC := $(QT_BIN_DIR)/moc
+RCC := $(QT_BIN_DIR)/rcc
+UIC := $(QT_BIN_DIR)/uic
 
 ASFLAGS =
 CFLAGS = 
-CXXFLAGS = $(QT_INCLUDE)
+CXXFLAGS += -I$(QT_INCLUDE_DIR)
+
+DEBUG = 1
 
 ifeq ($(DEBUG), 1)
 CFLAGS += -g
+CXXFLAGS += -g
 endif
 
 # C defines
-C_DEFS =  \
+C_DEFS +=  \
 -DSIMULATOR
+
+QT_DEFS = \
+-DQT_GUI_LIB -DQT_CORE_LIB -DQT_SHARED
+
+CXX_DEFS = \
+$(QT_DEFS)
 
 C_INCLUDES += \
 -Isimulator/inc
 
 OPT = -Og
 
-CXX_SOURCES = $(shell find simulator -name '*.cpp')
+CXX_SOURCES += $(shell find simulator -name '*.cpp')
 Q_SOURCES = $(shell find simulator -name '*.qml')
 Q_SOURCES += $(shell find ui -name '*.qml')
 
@@ -46,29 +50,43 @@ Q_SOURCES += $(shell find ui -name '*.qml')
 # libraries
 LIBS = -lc -lm
 LDFLAGS = $(LIBDIR) $(LIBS) -Wl,-Map=$(BUILD_DIR)/$(TARGET).map,--cref 
-LDFLAGS += -L$(QT_DIR) -lQt6Gui -lQt6Core -lstdc++ -lm -lc -lgcc_s -lgcc
+LDFLAGS += -L$(QT_LIB_DIR) -lQt6Gui -lQt6Core -lQt6Quick -lQt6QuickWidgets -lQt6Qml -lQt6Widgets -lstdc++ -lm -lc -lgcc_s -lgcc
 
-INCLUDE := -I$(QT_DIR)/qt6 -I$(QT_DIR)/qt6/QtQuick -I$(QT_DIR)/qt6/QtQuick.2 -I$(QT_DIR)/qt6/QtGui
+#RESOURCE_FILES := $(BUILD_DIR)/qrc_resources.cpp
+RESOURCE_FILES = 
+QT_HEADER_DIRS = simulator
 
-#OBJECTS = $(addprefix $(OBJ_DIR)/,$(notdir $(Q_SOURCES:.qml=.qml.o)))
-#vpath %.qml $(sort $(dir $(Q_SOURCES)))
+# Collect header for MOC
+HEADERS := $(shell find $(QT_HEADER_DIRS) -name *.h)
+GENERATED_SOURCES += $(foreach hdr,$(HEADERS:.h=.moc.cpp),$(BUILD_DIR)/$(notdir $(hdr)))
+GENERATED_OBJECTS := $(GENERATED_SOURCES:.cpp=.o)
+RESOURCE_OBJECTS += $(RESOURCE_FILES:.cpp=.o)
 
-# Generated files
-UI_HEADER := $(INC_DIR)/ui_mainwindow.h
-MOC_FILES := $(MOC_DIR)/moc_mainwindow.cpp
-RESOURCE_FILES := $(BUILD_DIR)/qrc_resources.cpp
+$(info $(HEADERS))
+$(info $(RESOURCE_FILES))
+$(info $(GENERATED_SOURCES))
+$(info $(GENERATED_OBJECTS))
 
-# Generate UI header from .ui file
-#$(UI_HEADER): src/mainwindow.ui $(UIC)
-#	$(UIC) $< -o $@
+OBJECTS += $(GENERATED_OBJECTS)
+OBJECTS += $(RESOURCE_OBJECTS)
 
-# Generate MOC file from header
-#$(MOC_DIR)/moc_mainwindow.cpp: include/mainwindow.h $(MOC)
-#	$(MOC) $(INCLUDE) $< -o $@
+#######################################
+# build the application
+#######################################
+vpath %.qml $(sort $(dir $(Q_SOURCES)))
+
+$(GENERATED_SOURCES): $(HEADERS) $(MOC) | $(BUILD_DIR)
+	$(MOC) $< $(DEFINES) $(INCLUDE) $ -o $@
+
+$(RESOURCE_OBJECTS): $(RESOURCE_FILES) | $(BUILD_DIR)
+	$(CXX) $< $(CXX_DEFINES) $(C_DEFINES) $(CXXFLAGS) $(COMMON_FLAGS) -c -o $@
+
+$(GENERATED_OBJECTS): $(GENERATED_SOURCES) | $(BUILD_DIR)
+	$(CXX) $< $(CXX_DEFINES) $(C_DEFINES) $(CXXFLAGS) $(COMMON_FLAGS) -c -o $@
 
 # Generate resource file from .qrc
 $(RESOURCE_FILES): ui/SimulatorUI/SimulatorUI.qrc $(RCC) | $(BUILD_DIR)
-	$(RCC) $< -o $@
+	$(RCC) -g cpp  $< -o $@
 
 # Compile QML files (if needed, typically handled by QtQuick)
 $(BUILD_DIR)/%.qml.o: %.qml | $(BUILD_DIR)

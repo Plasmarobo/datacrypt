@@ -50,11 +50,16 @@ C_INCLUDES = \
 # AS defines
 AS_DEFS = 
 
+ASM_SOURCES = 
 # AS includes
 AS_INCLUDES = 
 
+CXX_SOURCES =
 CXX_INCLUDES += $(foreach dir,$(INCDIRS),-I$(dir))
 
+OBJECTS = 
+
+$(info Building platform $(PLATFORM))
 include $(PLATFORM).mk
 
 # The gcc compiler bin path can be either defined in make command via GCC_PATH variable (> make GCC_PATH=xxx)
@@ -104,8 +109,6 @@ vpath %.s $(sort $(dir $(ASM_SOURCES)))
 
 OBJECTS += $(addprefix $(BUILD_DIR)/,$(notdir $(CXX_SOURCES:.cpp=.o)))
 vpath %.cpp $(sort $(dir $(CXX_SOURCES)))
-
-$(info $(ASM_SOURCES))
 
 $(info $(OBJECTS))
 

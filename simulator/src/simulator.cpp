@@ -7,6 +7,7 @@
 #include <QtGui/QImage>
 #include <QtQuick/QQuickImageProvider>
 #include <QtWidgets/QApplication>
+#include <QtCore/QTimer>
 
 #include "simulator.h"
 
@@ -14,9 +15,9 @@ static std::thread *host_thread;
 
 #define QBUFFER(i) QImage(128, i < 4 ? 64 : 32, QImage::Format_Mono)
 
-SimulatorImageProvider *SimulatorImageProvider::instance = NULL;
+SimDisplay *SimDisplay::instance = NULL;
 
-SimulatorImageProvider::SimulatorImageProvider() : QQuickImageProvider(QQuickImageProvider::Image)
+SimDisplay::SimDisplay() : QQuickImageProvider(QQuickImageProvider::Image)
 {
     if (instance)
     {
@@ -30,7 +31,7 @@ SimulatorImageProvider::SimulatorImageProvider() : QQuickImageProvider(QQuickIma
     }
 }
 
-QImage SimulatorImageProvider::requestImage(const QString &id, QSize *size, const QSize &requestedSize)
+QImage SimDisplay::requestImage(QString const &id, QSize *size, QSize const &requestedSize)
 {
     UNUSED(requestedSize);
     QImage image;
@@ -65,7 +66,7 @@ QImage SimulatorImageProvider::requestImage(const QString &id, QSize *size, cons
     return image;
 }
 
-void SimulatorImageProvider::readDisplay(int index, buffer_t img, uint8_t width, uint8_t height)
+void SimDisplay::readDisplay(int index, buffer_t img, uint8_t width, uint8_t height)
 {
     if (index < 0 || index >= 8)
     {
@@ -75,7 +76,7 @@ void SimulatorImageProvider::readDisplay(int index, buffer_t img, uint8_t width,
     memcpy(img, this->buffer[index].bits(), width * height);
 }
 
-void SimulatorImageProvider::writeDisplay(int index, const buffer_t img, uint8_t width, uint8_t height)
+void SimDisplay::writeDisplay(int index, const buffer_t img, uint8_t width, uint8_t height)
 {
     if (index < 0 || index >= 8)
     {
@@ -86,7 +87,7 @@ void SimulatorImageProvider::writeDisplay(int index, const buffer_t img, uint8_t
     emit imageChanged();
 }
 
-SimulatorImageProvider *SimulatorImageProvider::getInstance()
+SimDisplay *SimDisplay::getInstance()
 {
     return instance;
 }
@@ -96,15 +97,24 @@ void hal_worker()
     int argc = 0;
     char *argv[1] = {NULL};
     QApplication app(argc, argv);
-    qmlRegisterType<SimulatorImageProvider>("SimulatorImageProvider", 1, 0, "SimulatorImageProvider");
 
     // Using QQuickView
     QQuickView view;
     QQmlEngine *engine = view.engine();
-    engine->addImageProvider(QLatin1String("SimulatorImageProvider"), SimulatorImageProvider::getInstance());
-    view.setSource(QUrl::fromLocalFile("ui/SimulatorUI/SimulatorUIContent/App.qml"));
+    engine->addImageProvider(QLatin1String("SimDisplay"), SimDisplay::getInstance());
+    engine->addImportPath("qrc:/ui");
+    view.setSource(QUrl::fromLocalFile("ui/App.qml"));
+
+    QObject *object = reinterpret_cast<QObject *>(view.rootObject());
+    object->findChild<QObject *>("dc0")->setProperty("index", 0);
+    object->findChild<QObject *>("dc0")->setProperty("btn_label", "A");
+    object->findChild<QObject *>("dc1")->setProperty("index", 1);
+    object->findChild<QObject *>("dc1")->setProperty("btn_label", "B");
+    object->findChild<QObject *>("dc2")->setProperty("index", 2);
+    object->findChild<QObject *>("dc2")->setProperty("btn_label", "C");
+    object->findChild<QObject *>("dc3")->setProperty("index", 3);
+    object->findChild<QObject *>("dc3")->setProperty("btn_label", "D");
     view.show();
-    // QQuickItem *object = view.rootObject();
 
     app.exec();
 }

@@ -141,13 +141,19 @@ void serial_read(buffer_t dest, length_t length, callback_t oncomplete)
     }
     length_t to_copy = std::min(length, (length_t)message.length());
     memcpy(dest, message.c_str(), to_copy);
-    oncomplete(to_copy);
+    if (oncomplete)
+    {
+        oncomplete(to_copy);
+    }
 }
 void serial_write(const buffer_t data, length_t length, callback_t oncomplete)
 {
     std::string message((const char *)data, length);
     broadcast_message(message);
-    oncomplete(length);
+    if (oncomplete)
+    {
+        oncomplete(length);
+    }
 }
 void serial_print(const char *str)
 {

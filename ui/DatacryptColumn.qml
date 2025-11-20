@@ -3,8 +3,8 @@ import QtQuick.Controls
 import QtQuick.Layouts
 
 ColumnLayout {
-    required property string btn_label
-    required property int index
+    property string btn_label
+    property int index
 
     id: column
     Layout.alignment: Qt.AlignHCenter | Qt.AlignVCenter
@@ -15,7 +15,7 @@ ColumnLayout {
         id: img_b
         width: 128
         height: 64
-        source: "image://SimulatorImageProvider/display_big_" + index
+        source: "image://SimDisplay/display_big_" + index
         cache: false
         Layout.alignment: Qt.AlignHCenter | Qt.AlignVCenter
         fillMode: Image.PreserveAspectFit
@@ -25,7 +25,7 @@ ColumnLayout {
         id: img_s
         width: 128
         height: 32
-        source: "image://SimulatorImageProvider/display_small_" + index
+        source: "image://SimDisplay/display_small_" + index
         cache: false
         Layout.alignment: Qt.AlignHCenter | Qt.AlignVCenter
         fillMode: Image.PreserveAspectFit
