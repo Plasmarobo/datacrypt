@@ -2,6 +2,7 @@
 #include "defs.h"
 #include "serial.h"
 #include "print.h"
+#include "simulator.h"
 
 #include <sys/stat.h>
 #include <fcntl.h>
@@ -18,6 +19,8 @@
 #include <cerrno>
 #include <sys/socket.h>
 #include <sys/un.h>
+#include <chrono>
+#include <algorithm>
 
 static std::atomic<bool> serial_running;
 static std::queue<std::string> message_queue;
@@ -25,6 +28,14 @@ static std::mutex message_queue_mutex;
 static std::mutex socket_mutex;
 static std::optional<std::string> pending_message;
 const char *socket_path = "/dev/Datacrypt";
+
+static std::thread *sock_thread;
+static std::thread *stdio_thread;
+static std::thread *read_thread;
+std::mutex read_mutex;
+static callback_t read_callback = NULL;
+static buffer_t read_buffer = NULL;
+static length_t read_length = 0;
 
 static std::optional<std::string> read_message()
 {
@@ -51,6 +62,7 @@ static void broadcast_message(std::string message)
 {
     // For simulator, just print to stdout
     std::cout << message;
+    SimDisplays::appendText(message.c_str(), message.length());
     // Overwrite pending message
     std::lock_guard<std::mutex> guard(socket_mutex);
     pending_message = message;
@@ -116,35 +128,61 @@ void serial_sock_worker()
     close(sock);
 }
 
-static std::thread *sock_thread;
-static std::thread *stdio_thread;
+void serial_read_worker()
+{
+    std::string message;
+    // Outer loop to read incoming data
+    while (serial_running.load())
+    {
+        auto opt_message = read_message();
+        if (opt_message.has_value())
+        {
+            message = opt_message.value();
+            // Inner loop to copy complete messages
+            while (message.length() > 0)
+            {
+                {
+                    std::lock_guard<std::mutex> guard(read_mutex);
+                    if (read_callback != NULL)
+                    {
+                        if (read_length > 0)
+                        {
+                            length_t to_copy = read_length > message.length() ? message.length() : read_length;
+                            memcpy(read_buffer, message.c_str(), to_copy);
+                            read_length -= to_copy;
+                            read_buffer += to_copy;
+                            if (read_length == 0)
+                            {
+                                read_callback(STATUS_OK);
+                                read_callback = NULL;
+                                read_buffer = NULL;
+                                read_length = 0;
+                            }
+                            message = message.substr(to_copy);
+                        }
+                    }
+                }
+                std::this_thread::sleep_for(std::chrono::milliseconds(1));
+            }
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    }
+}
 
 void serial_init()
 {
     serial_running.store(true);
     sock_thread = new std::thread(&serial_sock_worker);
     stdio_thread = new std::thread(&serial_stdio_worker);
+    read_thread = new std::thread(&serial_read_worker);
 }
 
 void serial_read(buffer_t dest, length_t length, callback_t oncomplete)
 {
-    std::string message;
-    while (true)
-    {
-        auto opt_message = read_message();
-        if (opt_message.has_value())
-        {
-            message = opt_message.value();
-            break;
-        }
-        std::this_thread::sleep_for(std::chrono::milliseconds(10));
-    }
-    length_t to_copy = std::min(length, (length_t)message.length());
-    memcpy(dest, message.c_str(), to_copy);
-    if (oncomplete)
-    {
-        oncomplete(to_copy);
-    }
+    std::lock_guard<std::mutex> guard(read_mutex);
+    read_callback = oncomplete;
+    read_buffer = dest;
+    read_length = length;
 }
 void serial_write(const buffer_t data, length_t length, callback_t oncomplete)
 {

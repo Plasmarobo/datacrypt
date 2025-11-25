@@ -48,10 +48,12 @@ Rectangle {
         anchors.bottomMargin: 0
 
         TextArea {
-            id: textArea
+            id: textOutput
+            objectName: "textOutput"
             Layout.fillHeight: true
             Layout.fillWidth: true
-            placeholderText: qsTr("Text Area")
+            readOnly: true
+            placeholderText: qsTr("")
         }
     }
 }

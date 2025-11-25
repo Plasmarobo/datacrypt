@@ -1,6 +1,7 @@
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
+import com.millibyte.displayview 1.0
 
 ColumnLayout {
     property string btn_label
@@ -11,24 +12,17 @@ ColumnLayout {
     Layout.minimumHeight: 400
     Layout.fillWidth: true
     Layout.fillHeight: true
-    Image {
-        id: img_b
+
+    DisplayView {
+        objectName: "image_b" + index
         width: 128
         height: 64
-        source: "image://SimDisplay/display_big_" + index
-        cache: false
-        Layout.alignment: Qt.AlignHCenter | Qt.AlignVCenter
-        fillMode: Image.PreserveAspectFit
     }
 
-    Image {
-        id: img_s
+    DisplayView {
+        objectName: "image_s" + index
         width: 128
         height: 32
-        source: "image://SimDisplay/display_small_" + index
-        cache: false
-        Layout.alignment: Qt.AlignHCenter | Qt.AlignVCenter
-        fillMode: Image.PreserveAspectFit
     }
 
     Button {
