@@ -13,6 +13,7 @@
 #define APP_UPDATE_PERIOD_MS (100)
 
 static uint8_t selection = 0;
+static state_t *current_state = NULL;
 
 // From boot, run through these top level states
 static void select_test(int32_t value);
@@ -105,8 +106,8 @@ static void select_game(int32_t value) {
 static void start(int32_t value) {
     UNUSED(value);
     if (selection & 0x02) {
-        fsm_set_state(NULL, STATEREF(app_fsm, mode_select));
+        fsm_set_state(&current_state, STATEREF(app_fsm, mode_select));
     } else if (selection & 0x01) {
-        fsm_set_state(NULL, STATEREF(app_fsm, test));
+        fsm_set_state(&current_state, STATEREF(app_fsm, test));
     }
 };

@@ -30,41 +30,42 @@ gpio_t LOCK0_TGL = {25, NULL, 0, NULL};
 gpio_t LOCK1_TGL = {26, NULL, 0, NULL};
 gpio_t ANALOG_RNG = {27, NULL, 0, NULL};
 
-static uint32_t gpio_state;
+const uint32_t PRESSED = 0;
 
-void gpio_set(gpio_t gpio, bool set)
+// Output device -> host
+void gpio_set(gpio_t *gpio, bool set)
 {
-    uint32_t mask = (1 << gpio.pin);
-    if (set)
+    gpio->value = set;
+}
+
+// Input device <- host
+bool gpio_get(gpio_t *gpio)
+{
+    return gpio->value;
+}
+
+void gpio_set_callback(gpio_t *gpio, gpio_change_handler_t on_change)
+{
+    gpio->cb = on_change;
+}
+
+void gpio_host_set(gpio_t &gpio, bool value)
+{
+    if (gpio.value != value)
     {
-        gpio_state |= mask;
+        gpio.value = value;
+        if (value == PRESSED && gpio.cb != NULL)
+        {
+            gpio.cb(&gpio, gpio.value ? 1 : 0);
+        }
     }
-    else
-    {
-        gpio_state &= ~mask;
-    }
 }
 
-bool gpio_get(gpio_t gpio)
+uint32_t gpio_host_get(gpio_t &gpio)
 {
-    return (gpio_state & (1 << gpio.pin)) != 0;
+    uint32_t state = gpio.value ? 1 : 0;
+    return state;
 }
-
-void gpio_set_callback(gpio_t gpio, callback_t on_change)
-{
-    gpio.cb = on_change;
-}
-
-// Host hook functions
-void _gpio_host_set(uint32_t state)
-{
-    gpio_state = state;
-}
-uint32_t _gpio_host_get()
-{
-    return gpio_state;
-}
-
 // Unused
 void gpio_change_handler(gpio_t gpio)
 {

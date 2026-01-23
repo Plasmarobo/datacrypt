@@ -40,10 +40,18 @@ void draw_char(uint8_t x, uint8_t y, unsigned char c, uint8_t sx,
 void draw_text(uint8_t x, uint8_t y, const char *text, length_t length)
 {
     const uint8_t scale = 2;
+    uint8_t x_offset = x;
     for (uint8_t i = 0; i < length; ++i)
     {
         // Font is 6x8 (padding included)
-        draw_char(x + (6 * i * scale), y, (uint8_t)text[i], scale, scale);
+        if (text[i] == '\n')
+        {
+            y += 8 * scale;
+            x_offset = x; // carriage return
+            continue;
+        }
+        draw_char(x_offset, y, (uint8_t)text[i], scale, scale);
+        x_offset += (6 * scale);
     }
 }
 

@@ -13,7 +13,7 @@ RCC := $(QT_BIN_DIR)/rcc
 UIC := $(QT_BIN_DIR)/uic
 
 ASFLAGS =
-CFLAGS = 
+CFLAGS =
 CXXFLAGS += -I$(QT_INCLUDE_DIR)
 
 DEBUG = 1
@@ -36,7 +36,7 @@ $(QT_DEFS)
 C_INCLUDES += \
 -Isimulator/inc
 
-OPT = -Og
+OPT = -O0
 
 CXX_SOURCES += $(shell find simulator -name '*.cpp')
 Q_SOURCES = $(shell find simulator -name '*.qml')

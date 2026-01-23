@@ -100,6 +100,20 @@ static void update_state(int32_t status);
 
 static uint8_t get_height() { return ((selected_display % 2) == 0) ? 64 : 32; }
 
+// Assumes displays are connected/muxed in order
+uint8_t diplay_index(uint8_t col, uint8_t row)
+{
+    if (col > 3)
+    {
+        return DISPLAY_MAX;
+    }
+    if (row > 7)
+    {
+        return DISPLAY_MAX;
+    }
+    return col + (row * 4);
+}
+
 LOCALSTATE(dfsm, idle);
 LOCALSTATE(dfsm, init);
 LOCALSTATE(dfsm, setup);
@@ -197,13 +211,11 @@ static STATE(dfsm, idle, enter);
 // Execute the current state without popping anything off the stack
 static void next_state(int32_t status) {
     if (ringbuffer_empty(&state_queue)) {
-        fsm_set_state(NULL, STATEREF(dfsm, idle));
-        current_state = STATEREF(dfsm, idle);
+        fsm_set_state(&current_state, STATEREF(dfsm, idle));
     } else {
         state_t* new_state = NULL;
         ringbuffer_pop(&state_queue, &new_state);
-        fsm_set_state(current_state, new_state);
-        current_state = new_state;
+        fsm_set_state(&current_state, new_state);
     }
 }
 

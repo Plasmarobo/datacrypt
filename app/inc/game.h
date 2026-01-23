@@ -6,6 +6,7 @@
 
 #include "words.h"
 #include "defs.h"
+#include "display.h"
 
 typedef enum
 {
@@ -55,6 +56,15 @@ void game_new();
 game_state_t *game();
 void game_save(callback_t oncomplete);
 void game_load(callback_t oncomplete);
+
+#define DISP_A0 (DISP(0, 0))
+#define DISP_A1 (DISP(1, 0))
+#define DISP_A2 (DISP(2, 0))
+#define DISP_A3 (DISP(3, 0))
+#define DISP_B0 (DISP(0, 1))
+#define DISP_B1 (DISP(1, 1))
+#define DISP_B2 (DISP(2, 1))
+#define DISP_B3 (DISP(3, 1))
 
 void disp_print(uint8_t display, uint8_t x, uint8_t y, const char *text);
 void disp_printf(uint8_t display, uint8_t x, uint8_t y, const char *fmt, ...);

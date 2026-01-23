@@ -62,7 +62,7 @@ static void broadcast_message(std::string message)
 {
     // For simulator, just print to stdout
     std::cout << message;
-    SimDisplays::appendText(message.c_str(), message.length());
+    SimulatorContext::getContext()->appendText(message.c_str(), message.length());
     // Overwrite pending message
     std::lock_guard<std::mutex> guard(socket_mutex);
     pending_message = message;

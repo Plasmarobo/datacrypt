@@ -10,12 +10,16 @@ extern "C"
 {
 #endif
 
-    typedef struct
+    struct gpio_t;
+    typedef struct gpio_t gpio_t;
+    typedef void (*gpio_change_handler_t)(gpio_t *gpio, int32_t value);
+
+    typedef struct gpio_t
     {
         uint16_t pin;
         void *port;
         bool value;
-        callback_t cb;
+        gpio_change_handler_t cb;
     } gpio_t;
 
     // Logical GPIOs
@@ -55,14 +59,16 @@ extern "C"
 #define CANCEL_SW (INTERCEPT_SW)
 #define RIGHT_SW (TIMER_SW)
 
+#define IS_LOCKED(l) (gpio_get(l))
+
     void gpio_update(int32_t status);
     void gpio_mark_dirty(uint8_t fields);
     uint8_t gpio_get_dirty();
     void gpio_clear_dirty(uint8_t fields);
-    void gpio_set(gpio_t gpio, bool set);
-    bool gpio_get(gpio_t gpio);
-    void gpio_set_callback(gpio_t gpio, callback_t on_change);
-    void gpio_change_handler(gpio_t gpio);
+    void gpio_set(gpio_t *gpio, bool set);
+    bool gpio_get(gpio_t *gpio);
+    void gpio_set_callback(gpio_t *gpio, gpio_change_handler_t on_change);
+    void gpio_change_handler(gpio_t *gpio);
 
 #ifdef __cplusplus
 }

@@ -13,7 +13,7 @@ static uint8_t intercepts_available;
 static void change_sort(int32_t status)
 {
     UNUSED(status);
-    if (gpio_get(LOCK0_TGL))
+    if (gpio_get(&LOCK0_TGL))
     {
         // Sort in word order
         disp_print(0, 2, 2, get_current_team()->words.words[0]);

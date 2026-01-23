@@ -7,84 +7,58 @@
 
 static event_handler_t handlers[EVENT_MAX];
 
-static void dispatch_lock0_sw(int32_t value)
+const timespan_t DEBOUNCE_TIME_MS = 50;
+
+static gpio_t *current_debounce = NULL;
+
+static void debounce_event(int32_t status)
 {
-    static int32_t previous_value = 0;
-    int32_t change = value ^ previous_value;
-    previous_value = value;
-    if (change)
+    UNUSED(status);
+    if (current_debounce != NULL)
     {
-        event_dispatch(EVENT_LOCK0, value);
+        event_t ev = EVENT_NOOP;
+        if (current_debounce == &LOCK0_TGL)
+        {
+            ev = EVENT_LOCK0;
+        }
+        else if (current_debounce == &LOCK1_TGL)
+        {
+            ev = EVENT_LOCK1;
+        }
+        else if (current_debounce == &LOCK2_TGL)
+        {
+            ev = EVENT_LOCK2;
+        }
+        else if (current_debounce == &LOCK3_TGL)
+        {
+            ev = EVENT_LOCK3;
+        }
+        else if (current_debounce == &LEFT_SW)
+        {
+            ev = EVENT_LEFT;
+        }
+        else if (current_debounce == &ACCEPT_SW)
+        {
+            ev = EVENT_ACCEPT;
+        }
+        else if (current_debounce == &CANCEL_SW)
+        {
+            ev = EVENT_CANCEL;
+        }
+        else if (current_debounce == &RIGHT_SW)
+        {
+            ev = EVENT_RIGHT;
+        }
+        event_dispatch(ev, current_debounce->value ? 1 : 0);
+        current_debounce = NULL;
     }
 }
-static void dispatch_lock1_sw(int32_t value)
+static void debounce_handler(gpio_t *gpio, int32_t value)
 {
-    static int32_t previous_value = 0;
-    int32_t change = value ^ previous_value;
-    previous_value = value;
-    if (change)
+    if (current_debounce == NULL)
     {
-        event_dispatch(EVENT_LOCK1, value);
-    }
-}
-static void dispatch_lock2_sw(int32_t value)
-{
-    static int32_t previous_value = 0;
-    int32_t change = value ^ previous_value;
-    previous_value = value;
-    if (change)
-    {
-        event_dispatch(EVENT_LOCK2, value);
-    }
-}
-static void dispatch_lock3_sw(int32_t value)
-{
-    static int32_t previous_value = 0;
-    int32_t change = value ^ previous_value;
-    previous_value = value;
-    if (change)
-    {
-        event_dispatch(EVENT_LOCK3, value);
-    }
-}
-static void dispatch_left_sw(int32_t value)
-{
-    static int32_t previous_value = 0;
-    int32_t change = value ^ previous_value;
-    previous_value = value;
-    if (change)
-    {
-        event_dispatch(EVENT_LEFT, value);
-    }
-}
-static void dispatch_accept_sw(int32_t value)
-{
-    static int32_t previous_value = 0;
-    int32_t change = value ^ previous_value;
-    previous_value = value;
-    if (change)
-    {
-        event_dispatch(EVENT_ACCEPT, value);
-    }
-}
-static void dispatch_cancel_sw(int32_t value)
-{
-    static int32_t previous_value = 0;
-    int32_t change = value ^ previous_value;
-    previous_value = value;
-    if (change)
-    {
-        event_dispatch(EVENT_CANCEL, value);
-    }
-}
-static void dispatch_right_sw(int32_t value)
-{
-    static int32_t previous_value = 0;
-    int32_t change = value ^ previous_value;
-    previous_value = value;
-    if (change)
-    {
-        event_dispatch(EVENT_RIGHT, value);
+        current_debounce = gpio;
+        task_delayed(debounce_event, MILLIS(DEBOUNCE_TIME_MS));
     }
 }
 
@@ -119,14 +93,14 @@ void events_init()
     // A better way to do this would be to get a bitfield from the gpios
     // and scan through it, allocating one function for everything instead of a function pointer
     // per signal
-    gpio_set_callback(LOCK0_TGL, dispatch_lock0_sw);
-    gpio_set_callback(LOCK1_TGL, dispatch_lock1_sw);
-    gpio_set_callback(LOCK2_TGL, dispatch_lock2_sw);
-    gpio_set_callback(LOCK3_TGL, dispatch_lock3_sw);
-    gpio_set_callback(LEFT_SW, dispatch_left_sw);
-    gpio_set_callback(ACCEPT_SW, dispatch_accept_sw);
-    gpio_set_callback(CANCEL_SW, dispatch_cancel_sw);
-    gpio_set_callback(RIGHT_SW, dispatch_right_sw);
+    gpio_set_callback(&LOCK0_TGL, debounce_handler);
+    gpio_set_callback(&LOCK1_TGL, debounce_handler);
+    gpio_set_callback(&LOCK2_TGL, debounce_handler);
+    gpio_set_callback(&LOCK3_TGL, debounce_handler);
+    gpio_set_callback(&LEFT_SW, debounce_handler);
+    gpio_set_callback(&ACCEPT_SW, debounce_handler);
+    gpio_set_callback(&CANCEL_SW, debounce_handler);
+    gpio_set_callback(&RIGHT_SW, debounce_handler);
 }
 
 void events_update()

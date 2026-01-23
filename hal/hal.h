@@ -13,6 +13,8 @@ extern "C"
     // Late hardware setup (post-scheduler)
     void hal_task_init();
 
+    void hal_tick();
+
     timespan_t microseconds();
     timespan_t milliseconds();
 

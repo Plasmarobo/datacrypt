@@ -13,14 +13,17 @@ ColumnLayout {
     Layout.fillWidth: true
     Layout.fillHeight: true
 
+    signal pressed(bool value)
+    signal switched(bool value)
+
     DisplayView {
-        objectName: "image_b" + index
+        objectName: "image_b"
         width: 128
         height: 64
     }
 
     DisplayView {
-        objectName: "image_s" + index
+        objectName: "image_s"
         width: 128
         height: 32
     }
@@ -29,10 +32,15 @@ ColumnLayout {
         id: btn
         text: btn_label
         Layout.alignment: Qt.AlignHCenter | Qt.AlignVCenter
+
+        onPressed: {column.pressed(true)}
+        onReleased: {column.pressed(false)}
     }
 
     Switch {
         id: sw
         Layout.alignment: Qt.AlignHCenter | Qt.AlignVCenter
+
+        onCheckedChanged: {column.switched(checked)}
     }
 }

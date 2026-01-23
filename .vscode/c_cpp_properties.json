@@ -8,7 +8,8 @@
                 "${workspaceFolder}/drivers/CMSIS/Device/ST/STM32G0xx/Include",
                 "${workspaceFolder}/drivers/STM32G0xx_HAL_Driver/Inc",
                 "/usr/lib/arm-none-eabi/include/",
-                "/usr/lib/gcc/arm-none-eabi/12.2.1/include"
+                "/usr/lib/gcc/arm-none-eabi/12.2.1/include",
+                "${workspaceFolder}/hal"
             ],
             "compilerPath": "/usr/bin/arm-none-eabi-gcc",
             "compilerArgs": [
@@ -46,7 +47,7 @@
             "cppStandard": "c++23",
             "compilerPath": "g++",
             "compilerPathInCppPropertiesJson": "g++",
-            "intelliSenseMode": "gcc-arm",
+            "intelliSenseMode": "linux-gcc-x64",
             "mergeConfigurations": false,
             "recursiveIncludes": {},
             "browse": {

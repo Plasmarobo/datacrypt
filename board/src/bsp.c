@@ -152,6 +152,7 @@ void hal_task_init()
     flash_init(NULL);
     adc_init(NULL);
 }
+void hal_tick() {}
 
 /**
  * @brief System Clock Configuration

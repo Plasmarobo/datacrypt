@@ -11,6 +11,7 @@
 #include "display.h"
 #include "leds.h"
 #include "random.h"
+#include "events.h"
 
 int main() {
     // HW init
@@ -22,12 +23,12 @@ int main() {
     // HAL Init
     random_init();
     leds_init();
-    display_init(game_init);
     serial_write((const buffer_t) "\r\nBOOT\r\n", 8, NULL);
     filesystem_init();
     rpc_init();
+    events_init();
+    display_init(game_init);
     // Start exec
-    game_init(0);
     scheduler_freerun();
     return 0;
 }

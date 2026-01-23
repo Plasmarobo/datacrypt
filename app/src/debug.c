@@ -24,7 +24,9 @@ void dbgprintf(const char* fmt, ...) {
     va_start(args, fmt);
     vsnprintf(buffer, 128, fmt, args);
     va_end(args);
+    va_start(args, fmt);
     vserial_printf(fmt, args);
+    va_end(args);
 
 #ifdef ENABLE_DEBUG_DISPLAY
     display_clear();

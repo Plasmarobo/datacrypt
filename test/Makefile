@@ -96,7 +96,7 @@ C_INCLUDES += $(foreach dir,$(INCDIRS),-I$(dir))
 CFLAGS += $(MCU) $(C_DEFS) $(C_INCLUDES) $(OPT) -Wall 
 
 ifeq ($(DEBUG), 1)
-CFLAGS += -g1 -gdwarf-2
+CFLAGS += -g -gdwarf-2
 endif
 
 
@@ -159,6 +159,7 @@ $(BUILD_DIR):
 #######################################
 clean:
 	-rm -fR $(BUILD_DIR)
+	-rm -fR $(BIN_DIR)
   
 #######################################
 # dependencies

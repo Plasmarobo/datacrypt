@@ -79,7 +79,7 @@ STATE_UPDATE(f,IDLE)
 STATE(f,IDLE,enter,update,exit);
 */
 // Generic implementation
-void fsm_set_state(state_t *current, state_t *new);
+void fsm_set_state(state_t **current, state_t *new);
 
 // Run the current state update routine
 void fsm_update(state_t *current);

@@ -21,6 +21,7 @@ extern "C"
 #define DISP7_INDEX (0x40)
 #define DISPLAY_MAX (8)
 #define DISPLAY_MAX_STRING (128)
+#define DISP(x, y) ((x) + (y * 4))
 
     void display_init(callback_t on_complete);
     void display_select(uint8_t index, callback_t on_complete);

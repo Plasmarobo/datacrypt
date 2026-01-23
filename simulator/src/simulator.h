@@ -6,6 +6,11 @@
 #include <mutex>
 
 #include "defs.h"
+#include "gpio.h"
+
+// Host hook functions
+void gpio_host_set(gpio_t &gpio_host_set, bool value);
+uint32_t gpio_host_get(gpio_t &gpio);
 
 class DisplayView : public QQuickPaintedItem
 {
@@ -19,6 +24,7 @@ private:
     std::mutex mutex;
     int _height;
     int _width;
+    bool _inverted;
 
 public:
     explicit DisplayView(QQuickItem *parent = nullptr) : QQuickPaintedItem(parent)
@@ -37,19 +43,52 @@ public:
     void widthChanged() {}
     int width() const { return _width; }
     void setWidth(int width) { _width = width; }
+
+    void invertedChanged() { flushBuffer(); }
+    bool inverted() const { return _inverted; }
+    void setInverted(bool inverted)
+    {
+        _inverted = inverted;
+        QMetaObject::invokeMethod(this, "update", Qt::QueuedConnection);
+        invertedChanged();
+    }
 signals:
     void flushBuffer();
 };
 
-class SimDisplays : public QObject
+class HostInputGPIO : public QObject
+{
+    Q_OBJECT
+public:
+    HostInputGPIO(gpio_t *gpio, QObject *parent = nullptr) : QObject(parent), _gpio(gpio) {}
+
+protected:
+    gpio_t *_gpio;
+public slots:
+    void setGPIO(bool value)
+    {
+        if (_gpio != nullptr)
+        {
+            gpio_host_set(*_gpio, value);
+        }
+    }
+};
+
+class SimulatorContext : public QObject
 {
     Q_OBJECT
 private:
     static const buffer_t power_on_pattern;
+    static SimulatorContext *_context;
 
 public:
-    static void init()
+    void init()
     {
+        if (_context != nullptr)
+        {
+            return;
+        }
+        _context = this;
         displays[0] = nullptr;
         displays[1] = nullptr;
         displays[2] = nullptr;
@@ -60,7 +99,8 @@ public:
         displays[7] = nullptr;
         textOutput = nullptr;
     }
-    static DisplayView *getDisplay(int index)
+
+    DisplayView *getDisplay(int index)
     {
         if (index < 0 || index >= 8)
         {
@@ -68,7 +108,8 @@ public:
         }
         return displays[index];
     }
-    static void setDisplay(int index, DisplayView *display)
+
+    void setDisplay(int index, DisplayView *display)
     {
         if (index < 0 || index >= 8)
         {
@@ -78,12 +119,12 @@ public:
         displays[index]->writeDisplay(power_on_pattern, 128, (index < 4) ? 64 : 32);
     }
 
-    static void setTextOutput(QObject *textArea)
+    void setTextOutput(QObject *textArea)
     {
         textOutput = textArea;
     }
 
-    static void appendText(const char *text, int length)
+    void appendText(const char *text, int length)
     {
         // emit serialData(QString::fromUtf8(text, length));
         if (textOutput != nullptr)
@@ -95,10 +136,22 @@ public:
         }
     }
 
+    HostInputGPIO *gpioInput(gpio_t *gpio)
+    {
+        HostInputGPIO *input = new HostInputGPIO(gpio, this);
+        // QObject::connect(input, &HostInputGPIO::setGPIO, gpio, &gpio_t::value, Qt::QueuedConnection);
+        // QObject::connect(input, &HostInputGPIO::resetGPIO, gpio, &gpio_t::value, Qt::QueuedConnection);
+        inputs.push_back(input);
+        return input;
+    }
+
+    static SimulatorContext *getContext() { return _context; }
+
 private:
-    static std::map<int, DisplayView *>
+    std::map<int, DisplayView *>
         displays;
-    static QObject *textOutput;
+    std::vector<HostInputGPIO *> inputs;
+    QObject *textOutput;
 };
 
 #endif // __SIMULATOR_H__

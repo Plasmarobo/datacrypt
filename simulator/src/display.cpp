@@ -1,5 +1,6 @@
 #include <stdint.h>
 #include <iostream>
+#include <thread>
 
 #include "defs.h"
 
@@ -44,35 +45,18 @@ void display_set_inverted(bool inv, callback_t oncomplete)
     UNUSED(inv);
     // Not implemented, should be a property of the display
     uint8_t buffer[128 * 64 / 8];
-    DisplayView *displayView = SimDisplays::getDisplay(display_index);
-    if (displayView != nullptr)
+    DisplayView *displayView = SimulatorContext::getContext()->getDisplay(display_index);
+    displayView->setInverted(inv);
+    if (oncomplete)
     {
-        displayView->readDisplay(buffer, 128, get_height());
-        for (int i = 0; i < 128 * 64 / 8; i++)
-        {
-            buffer[i] = ~buffer[i];
-        }
-        displayView->writeDisplay(buffer, 128, get_height());
-
-        if (oncomplete)
-        {
-            oncomplete(0);
-        }
-    }
-    else
-    {
-        std::cerr << "Display " << display_index << " is not initialized" << std::endl;
-        if (oncomplete)
-        {
-            oncomplete(-1);
-        }
+        oncomplete(0);
     }
 }
 
 void display_clear()
 {
     memset(framebuffer, 0x00, 128 * 64 / 8);
-    DisplayView *displayView = SimDisplays::getDisplay(display_index);
+    DisplayView *displayView = SimulatorContext::getContext()->getDisplay(display_index);
     if (displayView != nullptr)
     {
         displayView->writeDisplay(framebuffer, 128, get_height());
@@ -86,7 +70,7 @@ void display_clear()
 void display_show(uint8_t display, callback_t on_complete)
 {
     int result = 0;
-    DisplayView *displayView = SimDisplays::getDisplay(display);
+    DisplayView *displayView = SimulatorContext::getContext()->getDisplay(display);
     if (displayView != nullptr)
     {
         displayView->writeDisplay(framebuffer, 128, get_height());
@@ -106,11 +90,11 @@ void display_pixel(uint16_t x, uint16_t y, uint8_t value)
     {
         if (value)
         {
-            framebuffer[((y / 8) * fb_w) + x] |= (0x01 << (y & 7));
+            framebuffer[((y * fb_w) + x) / 8] |= (0x01 << 7 - (x % 8));
         }
         else
         {
-            framebuffer[((y / 8) * fb_w) + x] &= ~(0x01 << (y & 7));
+            framebuffer[((y * fb_w) + x) / 8] &= ~(0x01 << 7 - (x % 8));
         }
     }
 }

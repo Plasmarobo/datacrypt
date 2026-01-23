@@ -25,6 +25,14 @@
             "target": "../build/test/Test.elf",
             "cwd": "${workspaceFolder}/test",
             "request": "launch",
+        },
+        {
+            "name": "Simulator",
+            "type": "cppdbg",
+            "program": "${workspaceFolder}/build/DataCrypt.elf",
+            "cwd": "${workspaceFolder}",
+            "request": "launch",
+            "preLaunchTask": "Build Simulator"
         }
     ]
 }

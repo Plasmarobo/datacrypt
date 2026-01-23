@@ -14,6 +14,7 @@
 #include "leds.h"
 #include "draw.h"
 #include "random.h"
+#include "effects.h"
 
 #include "game.h"
 
@@ -206,19 +207,19 @@ static void random_word(int32_t status)
     {
     case 0:
     case 1:
-        skip = gpio_get(LOCK0_TGL);
+        skip = gpio_get(&LOCK0_TGL);
         break;
     case 2:
     case 3:
-        skip = gpio_get(LOCK1_TGL);
+        skip = gpio_get(&LOCK1_TGL);
         break;
     case 4:
     case 5:
-        skip = gpio_get(LOCK2_TGL);
+        skip = gpio_get(&LOCK2_TGL);
         break;
     case 6:
     case 7:
-        skip = gpio_get(LOCK3_TGL);
+        skip = gpio_get(&LOCK3_TGL);
         break;
     default:
         break;
@@ -259,9 +260,11 @@ static void game_handler(int32_t status)
 void game_init(int32_t status)
 {
     UNUSED(status);
+    effects_init();
+
     set_current_team(TEAM_A);
-    clear_state(STATEREF(game, splash));
-    task_delayed(game_handler, MILLIS(2000));
+    set_state(STATEREF(game, splash));
+    task_periodic(game_handler, MILLIS(100));
     task_periodic(led_handler, MILLIS(LED_PERIOD_MS));
 }
 
@@ -412,6 +415,7 @@ void game_load(callback_t oncomplete)
 
 void disp_print(uint8_t display, uint8_t x, uint8_t y, const char *text)
 {
+    AWAIT(display_select(display, default_future));
     display_clear();
     draw_text(x, y, text, strlen(text));
     AWAIT(display_show(display, default_future));
@@ -421,17 +425,17 @@ void disp_printf(uint8_t display, uint8_t x, uint8_t y, const char *fmt, ...)
 {
     char buffer[DISPLAY_MAX_STRING];
     va_list args;
+
     va_start(args, fmt);
     vsnprintf(buffer, DISPLAY_MAX_STRING, fmt, args);
     va_end(args);
-    display_clear();
-    draw_text(x, y, buffer, strlen(buffer));
-    AWAIT(display_show(display, default_future));
+    disp_print(display, x, y, buffer);
 }
 
 void disp_draw(uint8_t display, uint8_t x, uint8_t y, const buffer_t img)
 {
     display_clear();
+    AWAIT(display_select(display, default_future));
     draw_blit(x, y, img, 128, 32);
     AWAIT(display_show(display, default_future));
 }
@@ -441,6 +445,8 @@ void disp_clear_all()
     display_clear();
     for (uint8_t i = 0; i < DISPLAY_MAX; ++i)
     {
+        AWAIT(display_select(i, default_future));
+        AWAIT(display_set_inverted(false, default_future));
         AWAIT(display_show(i, default_future));
     }
 }
